@@ -1,0 +1,11 @@
+# Airspace (FIR) boundary lines
+# Derived from the 24RC SVG assets (git HEAD, public/assets/maps), scaled px/10 into map units.
+# One SVG path "d" string per line, already in map units. Lines starting with # are comments.
+M -23.5 60 V 31 l -7.3 -7.5 V 4.4 l 7.8 -6.6 29.8 8.6 4 7.5 1.8 6.5 1.3 7.6 -11.5 5.9 v 26.1
+M 13.06329 23.10848 33 17.4 l 4 3.7 23 4.9
+M 33 17.4 31.7 16.2 31.4 9.9 33.4 7.6 33.7 5 26.8 4.4 9.16004 10.82508
+m -23 -2.2 6.1 -14.7 H 8.8 l 4.6 2.2 3.1 9.6 5.4 4.8 -1.86582 7.16435
+m 16.5 -5.1 5.5 -3 h 7.9 l 8.4 -5.9 7.8 -3.7 13.9 0.3
+M 8.8 -16.9 V -60
+M -18.52328 -12.98816 -32.3 -60
+M -60 13 -44.20586 14.6 -30.8 20.1

@@ -1,0 +1,401 @@
+/* ---- Button ------------------------------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  height: var(--ctl-h);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:hover:not(:disabled) {
+  background: var(--c-hover);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn--lg {
+  height: var(--ctl-h-lg);
+  padding: 0 var(--sp-4);
+  font-size: var(--fs);
+}
+.btn--primary {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+.btn--primary:hover:not(:disabled) {
+  background: #ffffff;
+}
+.btn--ghost {
+  border-color: transparent;
+}
+.btn--danger {
+  color: var(--c-danger);
+}
+.btn--armed,
+.btn--armed:hover:not(:disabled) {
+  border-color: var(--c-danger);
+  background: var(--c-danger);
+  color: #0a0a0a;
+}
+.btn--active {
+  background: var(--c-selected);
+}
+
+/* ---- Chip (route builders) ------------------------------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--c-text);
+  font-family: var(--font-data);
+  font-size: var(--fs);
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--c-hover);
+}
+.chip[aria-pressed="true"] {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+.chip--static {
+  cursor: default;
+}
+.chip__x {
+  color: var(--c-muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 22px;
+}
+
+/* ---- Fields ------------------------------------------------------------------------------------ */
+.field {
+  height: var(--ctl-h);
+  min-width: 0;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--c-muted);
+}
+.field::placeholder {
+  color: #6e6e6e;
+}
+.field--lg {
+  height: var(--ctl-h-lg);
+  font-size: var(--fs);
+}
+textarea.field {
+  height: auto;
+  padding: var(--sp-2);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  resize: vertical;
+}
+.label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.form {
+  display: grid;
+  gap: var(--sp-4);
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-2) var(--sp-3);
+  align-items: center;
+}
+.form-grid > label {
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.seg button {
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-right: 1px solid var(--c-border);
+  background: transparent;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.seg button[aria-pressed="true"] {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+/* ---- ListPopup / Popover ----------------------------------------------------------------------- */
+.listpop,
+.popover {
+  position: fixed;
+  z-index: var(--z-pop);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface);
+}
+.listpop {
+  min-width: 140px;
+  max-width: 340px;
+  overflow: hidden;
+  font-family: var(--font-data);
+}
+.listpop__filter {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 0;
+}
+.listpop__list {
+  max-height: 300px;
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.listpop__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 2px var(--sp-2);
+  font-size: var(--fs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.listpop__item[aria-selected="true"] {
+  background: var(--c-selected);
+}
+.listpop__item[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.listpop__hint {
+  margin-left: auto;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.listpop__empty {
+  padding: 4px var(--sp-2);
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.listpop__section {
+  padding: 6px var(--sp-2) 2px;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.popover {
+  min-width: 220px;
+  padding: var(--sp-3);
+}
+.popover__title {
+  margin-bottom: var(--sp-2);
+  font-weight: 600;
+}
+
+/* ---- Panel ------------------------------------------------------------------------------------- */
+.panel {
+  position: fixed;
+  z-index: var(--z-panel);
+  min-width: 180px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface);
+}
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 26px;
+  padding: 0 4px 0 var(--sp-2);
+  border-bottom: 1px solid var(--c-border);
+  cursor: grab;
+  user-select: none;
+}
+.panel--min .panel__head {
+  border-bottom: 0;
+}
+.panel__title {
+  flex: 1;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.panel__body {
+  min-height: 0;
+  overflow: auto;
+}
+.panel__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid var(--c-muted);
+  border-bottom: 2px solid var(--c-muted);
+  cursor: nwse-resize;
+  opacity: 0.6;
+}
+.panel__grip:hover {
+  opacity: 1;
+}
+.iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.iconbtn:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+
+/* ---- Modal ------------------------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.7);
+}
+.modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface);
+}
+.modal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.modal__title {
+  flex: 1;
+  font-size: var(--fs-lg);
+}
+.modal__body {
+  padding: var(--sp-4);
+}
+.modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+/* ---- Toast ------------------------------------------------------------------------------------- */
+.toasts {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+.toast {
+  max-width: 380px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface);
+  font-size: var(--fs-sm);
+  pointer-events: auto;
+}
+.toast--error {
+  color: var(--c-danger);
+}
+
+/* ---- Tables ------------------------------------------------------------------------------------ */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.table th {
+  padding: 6px var(--sp-2);
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-muted);
+  font-weight: 500;
+  text-align: left;
+}
+.table td {
+  padding: 5px var(--sp-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.table tr[aria-selected="true"] td {
+  background: var(--c-selected);
+}
+
+/* ---- Layout helpers ---------------------------------------------------------------------------- */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.grow {
+  flex: 1;
+}

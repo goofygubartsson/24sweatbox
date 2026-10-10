@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+var
+.env
+.env.*
+!.env.example
+.git
+test-results
+playwright-report
+packages/shared/src/data/*.json

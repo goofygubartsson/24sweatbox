@@ -1,0 +1,8 @@
+/* The UI font of the original sweatbox scope (one weight; headings and buttons use it as is). */
+@font-face {
+  font-family: "DIN Mittelschrift";
+  src: url("../assets/fonts/DINMittelschriftStd.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

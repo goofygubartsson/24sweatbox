@@ -1,0 +1,27 @@
+# Sample scenario written for development. It is NOT one of the 18 legacy scenarios
+# (Appendix D.10); convert those with `pnpm sbx:convert` and drop them into this folder.
+#
+# Rockford approach: arrivals for 25R / 25C vectored onto the ILS, departures off 25L. The
+# departures fly their routes and land at their destinations by themselves.
+
+[sweatbox]
+name = APP-IRFD-DEMO
+airport = IRFD
+view = CTR
+departure runway = 25L
+arrival runways = 25C, 25R
+
+[00:00] message: text="Rockford approach demo: vector the arrivals onto final for 25R and 25C."
+# established on a 12 NM final, cleared straight away
+[00:00] airborne: callsign=BAW3847 type=A333 position=34.031,4.069 altitude=4000 speed=210 level=FL270 route=HDG247 from=ITKO to=IRFD
+# needs vectors from the north
+[00:00] airborne: callsign=DLH12 type=A320 position=29.319,-7.627 altitude=6000 speed=250 level=FL300 route=HDG220 from=IPPH to=IRFD
+[00:05] approach: callsign=BAW3847 runway=25R
+[01:00] airborne: callsign=QTR6080 type=B77W position=48.804,12.837 altitude=8000 speed=250 level=FL350 route=HDG270 from=IZOL to=IRFD
+[02:00] departing: callsign=EZY45 type=A320 runway=25L climb=3000 level=FL240 route=GRY,LOGAN,SEEKS to=ISAU
+[03:00] departing: callsign=RYR8KP type=B738 runway=25L climb=3000 level=FL260 route=BLA to=IMLR speed=230
+[04:00] airborne: callsign=KLM643 type=B789 position=38.449,-11.51 altitude=7000 speed=250 level=FL380 route=HDG230 from=ITKO to=IRFD
+[05:00] airborne: callsign=SWA22 type=B738 position=33.587,19.308 altitude=5000 speed=230 level=FL230 route=HDG250 from=IPPH to=IRFD
+[06:00] assign: callsign=SWA22 altitude=4000
+[07:00] departing: callsign=AAL101 type=B77W runway=25L climb=5000 level=FL330 route=GRY,LOGAN,SEEKS to=ISAU
+[08:00] message: text="Last arrival is in. Watch your spacing on final."

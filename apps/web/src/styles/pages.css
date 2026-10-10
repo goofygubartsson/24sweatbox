@@ -1,0 +1,223 @@
+/* ---- page shell -------------------------------------------------------------------------------- */
+.page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.topline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 48px;
+  padding: 0 var(--sp-6);
+  border-bottom: 1px solid var(--c-border);
+}
+.topline__name {
+  font-weight: 600;
+}
+.topline__user {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.page__main {
+  flex: 1;
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-6);
+}
+.page-title {
+  margin-bottom: var(--sp-6);
+  font-size: 20px;
+}
+
+/* ---- home -------------------------------------------------------------------------------------- */
+.home {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--sp-6);
+}
+.home__user {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-6);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+}
+.home__center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  width: 100%;
+}
+.home__title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.home__login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.home__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  width: min(720px, 100%);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+}
+.home__option {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+}
+.home__option + .home__option {
+  border-left: 1px solid var(--c-border);
+}
+.home__option h2 {
+  font-size: var(--fs-lg);
+}
+.home__nav {
+  display: flex;
+  justify-content: center;
+  gap: var(--sp-6);
+  padding: var(--sp-6) 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.home__nav a {
+  color: var(--c-muted);
+}
+.home__nav a:hover {
+  color: var(--c-text);
+}
+@media (max-width: 640px) {
+  .home__option + .home__option {
+    border-left: 0;
+    border-top: 1px solid var(--c-border);
+  }
+}
+
+/* ---- maker ------------------------------------------------------------------------------------- */
+.maker-page {
+  height: 100%;
+}
+.maker__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--c-border);
+}
+.maker {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  min-height: 0;
+}
+.maker__col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+.maker__col + .maker__col,
+.maker__center + .maker__col {
+  border-left: 1px solid var(--c-border);
+}
+.maker__section {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+}
+.maker__section h2 {
+  font-size: var(--fs);
+}
+.maker__center {
+  display: grid;
+  grid-template-rows: minmax(260px, 1fr) minmax(160px, 0.8fr);
+  min-height: 0;
+  border-left: 1px solid var(--c-border);
+}
+.maker__map {
+  position: relative;
+  min-height: 260px;
+  border-bottom: 1px solid var(--c-border);
+  overflow: hidden;
+}
+.maker__map .scope-canvas-wrap {
+  inset: 0;
+}
+.maker__maphint {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  background: var(--c-surface);
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+.maker__table {
+  overflow: auto;
+}
+.issues {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.issue {
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.issue--error {
+  color: var(--c-danger);
+}
+.issue--warning {
+  color: var(--c-muted);
+}
+@media (max-width: 1100px) {
+  .maker {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- replay (no file yet) ---------------------------------------------------------------------- */
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: var(--sp-3);
+  min-height: 240px;
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r);
+  text-align: center;
+}
+.dropzone--over {
+  border-color: var(--c-muted);
+  background: var(--c-hover);
+}

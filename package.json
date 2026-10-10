@@ -1,31 +1,41 @@
 {
-  "name": "24rc",
-  "version": "0.1.2",
+  "name": "atc24academy-sweatbox",
   "private": true,
+  "description": "ATC24Academy Sweatbox: multi-user ATC radar training simulator for ATC24 / PTFS",
   "type": "module",
-  "scripts": {
-    "start": "npm run dev",
-    "build": "tsc && vite build",
-    "lint": "eslint .",
-    "dev": "vite",
-    "devhost": "vite --host"
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.11"
   },
-  "dependencies": {
-    "@pixi/ui": "^2.2.4",
-    "pixi.js": "^8.8.1",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+  "scripts": {
+    "data": "tsx scripts/build-data.ts",
+    "sbx:convert": "tsx scripts/convert-sbx.ts",
+    "predev": "tsx scripts/build-data.ts",
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "node scripts/pnpm.mjs --filter @sweatbox/server dev",
+    "dev:web": "node scripts/pnpm.mjs --filter @sweatbox/web dev",
+    "prebuild": "tsx scripts/build-data.ts",
+    "build": "node scripts/pnpm.mjs -r --filter ./apps/* build",
+    "start": "node scripts/pnpm.mjs --filter @sweatbox/server start",
+    "pretypecheck": "tsx scripts/build-data.ts",
+    "typecheck": "node scripts/pnpm.mjs -r typecheck",
+    "pretest": "tsx scripts/build-data.ts",
+    "test": "node scripts/pnpm.mjs -r test",
+    "e2e": "playwright test",
+    "check": "node scripts/pnpm.mjs typecheck && node scripts/pnpm.mjs test"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "eslint": "^9.21.0",
-    "eslint-config-prettier": "^10.1.2",
-    "eslint-plugin-prettier": "^5.2.6",
-    "prettier": "^3.5.3",
-    "typescript": "~5.7.3",
-    "typescript-eslint": "^8.25.0",
-    "vite": "^6.2.0"
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "zod": "^3.24.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }

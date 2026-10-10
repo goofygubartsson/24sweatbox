@@ -1,0 +1,53 @@
+/*
+ * ATC24Academy Sweatbox design tokens: one neutral palette, subtle borders, no shadows or animation.
+ * The colour values mirror colours.theme in sweatbox.config.ts; main.tsx re-applies the configured
+ * values at startup, so the config is the source of truth and these are the defaults.
+ */
+:root {
+  --c-bg: #0a0a0a;
+  --c-scope: #0a0a0a;
+  --c-surface: #141414;
+  --c-surface-2: #1c1c1c;
+  --c-border: #2e2e2e;
+  --c-text: #ededed;
+  --c-muted: #8f8f8f;
+  --c-primary: #f2f2f2;
+  --c-on-primary: #0a0a0a;
+  --c-danger: #cf6b6b;
+  --c-ok: #a9b8a9;
+  --c-hover: rgba(255, 255, 255, 0.06);
+  --c-selected: rgba(255, 255, 255, 0.1);
+
+  --font-ui: "DIN Mittelschrift", "Arial Narrow", system-ui, sans-serif;
+  --font-data: "DIN Mittelschrift", "Arial Narrow", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  --r: 3px;
+
+  --fs-sm: 12px;
+  --fs: 14px;
+  --fs-lg: 16px;
+  --fs-title: 30px;
+
+  --bar-h: 48px;
+  --bar-ctl-h: 34px;
+  --fs-bar: 16px;
+  --fs-bar-key: 13px;
+  --ctl-h: 26px;
+  --ctl-h-lg: 36px;
+
+  --z-ui: 10;
+  --z-bar: 20;
+  --z-panel: 30;
+  --z-pop: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}

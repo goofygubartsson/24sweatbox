@@ -1,0 +1,35 @@
+# Caddy in front of ATC24Academy Sweatbox (pm2 setup).
+#   web app:  pnpm build, then copy apps/web/dist/* to /var/www/sweatbox
+#   API:      pm2 start ecosystem.config.cjs  (listens on 127.0.0.1:3000, see sweatbox.config.ts)
+#
+# The API, its WebSocket (/api/ws) and the Discord redirect (/auth/callback) go to the Node
+# process; everything else is the single-page app. The server also accepts requests whose /api
+# prefix was stripped, so `handle_path /api/* { ... }` works too.
+
+sb.atc24academy.com {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle /auth/callback {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		root * /var/www/sweatbox
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+}

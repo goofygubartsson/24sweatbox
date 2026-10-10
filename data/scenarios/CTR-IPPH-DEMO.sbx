@@ -1,0 +1,15 @@
+# Sample scenario written for development. It is NOT one of the 18 legacy scenarios.
+#
+# Perth: arrivals for runway 29, departures off 29.
+
+[sweatbox]
+name = CTR-IPPH-DEMO
+airport = IPPH
+view = CTR
+
+[00:00] message: text="Perth demo: sequence two arrivals for runway 29."
+[00:00] airborne: callsign=QFA12 type=A388 position=50.52,-8.02 altitude=5000 speed=230 level=FL380 route=HDG291 from=ITKO to=IPPH
+[00:03] approach: callsign=QFA12 runway=29
+[00:30] airborne: callsign=UAE451 type=B77W position=54.08,-17.28 altitude=7000 speed=250 level=FL360 route=HDG250 from=IZOL to=IPPH
+[01:00] departing: callsign=SIA23 type=A359 runway=29 climb=5000 level=FL380 route=ROM,GAVIN,SETHR to=IRFD
+[03:20] emergency: callsign=UAE451

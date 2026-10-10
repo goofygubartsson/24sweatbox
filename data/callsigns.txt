@@ -1,0 +1,98 @@
+# Callsigns.
+#
+# [spoof]  PTFS spoof airline / spoken name = ICAO airline code
+#          Live data uses Roblox-style spoken callsigns ("Speedbird-123"); "Name-123" becomes
+#          "<ICAO>123" through this table (case-insensitive).
+# [radio]  ICAO airline code = radio callsign (real-world), also accepted as spoken names.
+#
+# [spoof] seeded from the 24RC airline map; replace/extend with Appendix D.8.
+
+[spoof]
+Shamrock = EIN
+Air Canadian = ACA
+Americano = AAL
+Speedbird = BAW
+Belta = DAL
+Hard = EZY
+JetBloo = JBU
+Oantas = QFA
+Oatari = QTR
+Scandialien = SAS
+Sprit Wings = NKS
+Turkey = THY
+BizzAir = RYS
+AirFrans = AFR
+Doncor = CFG
+PolKot = LOT
+Lifthansa = DLH
+Emarates = UAE
+KoreenAir = KAL
+Channex = EXS
+Byanair = RYR
+Northeast = SWA
+TomJet = TOM
+KLN = KLM
+AirBalistic = BTI
+Singadoor = SIA
+Cafey = CPA
+Thay = THA
+OldZealand = ANZ
+BetiAirlines = NYT
+Bliss = SWR
+Reunited = UAL
+Vulcan = WAD
+Supertransport = BGA
+Jersey = BEE
+Tedex = FDX
+Sus = UPS
+Worldstar = DHV
+GolfPapaGolf = GPG
+Bepsi = AFR
+Antonov Bureau = ADB
+Clipper = PAA
+IDERIA = IBE
+Broadsword = BRO
+STAFFBOI = PTC
+CEDU AIR = CEB
+AEROFLAT = AFL
+AZOL = AZU
+
+[radio]
+AAL = AMERICAN
+ACA = AIR CANADA
+AFL = AEROFLOT
+AFR = AIRFRANS
+ANZ = NEW ZEALAND
+AZU = AZUL
+BAW = SPEEDBIRD
+BEE = JERSEY
+BTI = AIRBALTIC
+CEB = CEBU
+CFG = CONDOR
+CPA = CATHAY
+DAL = DELTA
+DLH = LUFTHANSA
+EIN = SHAMROCK
+EXS = CHANNEX
+EZY = EASY
+FDX = FEDEX
+IBE = IBERIA
+JBU = JETBLUE
+KAL = KOREANAIR
+KLM = KLM
+LOT = POLLOT
+NKS = SPIRIT WINGS
+PAA = CLIPPER
+QFA = QANTAS
+QTR = QATARI
+RYR = RYANAIR
+SAS = SCANDINAVIAN
+SIA = SINGAPORE
+SWA = SOUTHWEST
+SWR = SWISS
+THA = THAI
+THY = TURKISH
+TOM = TOMJET
+UAE = EMIRATES
+UAL = UNITED
+UPS = UPS
