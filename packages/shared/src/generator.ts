@@ -107,10 +107,6 @@ export const ItemSchema = z.object({
   distNm: z.number().min(1).max(40).default(G.finalNm[0]!),
   side: z.enum(["L", "R"]).default("L"),
   tng: z.boolean().default(true),
-  /** Seconds after spawning that AUTO pushes and taxis it; null = it waits for instructions. */
-  autoDelay: z.number().int().min(0).max(3600).nullable().default(null),
-  /** DEL: once its strip is cleared it pushes, taxis and departs by itself (AUTO ... CLR). */
-  autoClr: z.boolean().default(false),
 });
 export type SweatboxItem = z.infer<typeof ItemSchema>;
 
@@ -144,8 +140,7 @@ function freeStand(apt: string, items: readonly SweatboxItem[], time: number): s
   const g = getGroundGraph(apt);
   if (!g) return null;
   const parked = items.filter((i) => (i.kind === "dep-stand" || i.kind === "cct-ga") && i.stand);
-  const busyUntil = (i: SweatboxItem) => (i.autoDelay === null ? Infinity : i.time + i.autoDelay + G.standOccupySec);
-  const stand = g.stands.find((s) => !parked.some((i) => i.stand === s.name && time >= i.time && time < busyUntil(i)));
+  const stand = g.stands.find((s) => !parked.some((i) => i.stand === s.name && time >= i.time));
   return stand?.name ?? null;
 }
 
@@ -193,7 +188,6 @@ export function makeItem(ctx: ItemContext, kind: Kind, time: number, arrRunway?:
   const used = new Set(items.map((i) => i.cs));
   const ga = kind === "cct-ga";
   const base = { id: newItemId(), time, kind, cs: randomCallsign(ga, used), type: pick(ga ? G.gaTypes : G.airlinerTypes) };
-  const autoDelay = ctx.position === "TWR" ? G.autoTaxiAfterSec : null;
   const ref = airportRef(apt);
   // departures fly published fixes toward their destination (then land there and are removed)
   const routeTo = (from: Vec, dest: string) => {
@@ -207,7 +201,7 @@ export function makeItem(ctx: ItemContext, kind: Kind, time: number, arrRunway?:
       const stand = ctx.anyStand && getGroundGraph(apt) ? "*" : freeStand(apt, items, time);
       if (!stand || !ref) return null;
       const arr = otherAirport(apt);
-      return ItemSchema.parse({ ...base, stand, runway: format.dep, route: routeTo(ref, arr), arr, dep: apt, rfl: pick(G.cruiseLevels), autoDelay, autoClr: ctx.position === "DEL" });
+      return ItemSchema.parse({ ...base, stand, runway: format.dep, route: routeTo(ref, arr), arr, dep: apt, rfl: pick(G.cruiseLevels) });
     }
     case "dep-air": {
       const end = findRunwayEnd(`${apt}-${format.dep}`);
@@ -236,7 +230,7 @@ export function makeItem(ctx: ItemContext, kind: Kind, time: number, arrRunway?:
     case "cct-ga": {
       const stand = freeStand(apt, items, time);
       if (!stand) return null;
-      return ItemSchema.parse({ ...base, stand, runway: format.dep, dep: apt, arr: apt, rfl: "010", route: "CCT", side: circuitSide(apt, format.dep), tng: true, autoDelay });
+      return ItemSchema.parse({ ...base, stand, runway: format.dep, dep: apt, arr: apt, rfl: "010", route: "CCT", side: circuitSide(apt, format.dep), tng: true });
     }
   }
 }
@@ -306,8 +300,6 @@ export function planSweatbox(s: SweatboxSettings): SweatboxPlan {
       if (it) items.push(it);
     }
   }
-  // TWR: they push and taxi to the departure runway's holding point one after another
-  if (fill && twr) staggerPushes(items, Math.round(60 / (G.perMinute[level] * G.rateByPosition.TWR)), duration * 60);
   let arrivals = 0;
   // arrivals on final: landings on one runway far enough apart that they never lose separation
   // (sim movement is gs / 3600 map units a second, and they slow to approach speed on short final)
@@ -335,21 +327,6 @@ export function planSweatbox(s: SweatboxSettings): SweatboxPlan {
   return { name: `${s.position}-${airport.code}-${format.id}`, apt: airport.code, position: s.position, format, rollout: rolloutFor(s.position, ground), items };
 }
 
-/**
- * TWR departures: the parked aircraft push one every `everySec`, from twrFirstPushSec on, in random
- * order with the circuit flights among the first few. Those whose turn falls after the end stay put.
- */
-function staggerPushes(items: SweatboxItem[], everySec: number, endSec: number): void {
-  const shuffled = [...items].sort(() => Math.random() - 0.5);
-  const ga = shuffled.filter((i) => i.kind === "cct-ga");
-  const order = shuffled.filter((i) => i.kind !== "cct-ga");
-  ga.forEach((it, k) => order.splice(Math.min(order.length, 1 + 3 * k), 0, it));
-  order.forEach((it, k) => {
-    const at = G.twrFirstPushSec + k * everySec;
-    it.autoDelay = at <= endSec ? at : null;
-  });
-}
-
 const viewFor = (p: Position): ScopeView => (p === "GND" || p === "DEL" ? "GND" : p === "TWR" ? "TWR" : "CTR");
 
 /** Glidepath altitude at `nm` from the threshold (same formula as the sim). */
@@ -359,7 +336,6 @@ function itemLines(apt: string, it: SweatboxItem): string[] {
   const t = it.time;
   const rwy = `${apt}-${it.runway}`;
   const c = (cmd: CommandInput) => formatCommand(cmd, apt)!;
-  const autodep = it.autoDelay === null ? [] : [c({ kind: "AUTO", offset: t + it.autoDelay, cs: it.cs, runway: rwy })];
   switch (it.kind) {
     case "dep-stand":
       return [
@@ -372,8 +348,6 @@ function itemLines(apt: string, it: SweatboxItem): string[] {
           ["to", it.arr],
           ["climb", it.climb],
         ]),
-        ...(it.autoClr ? [c({ kind: "AUTO", offset: t, cs: it.cs, runway: rwy, clr: true })] : []),
-        ...autodep,
       ];
     case "dep-air":
       return [c({ kind: "DEP", offset: t, cs: it.cs, type: it.type, runway: rwy, climb: it.climb, rfl: it.rfl, route: it.route, arr: it.arr, spd: cfg.sim.defaultDepSpeedKt })];
@@ -393,7 +367,6 @@ function itemLines(apt: string, it: SweatboxItem): string[] {
       return [
         c({ kind: "GATE", offset: t, cs: it.cs, type: it.type, apt, stand: it.stand, rfl: "010", route: "CCT", arr: apt }),
         c({ kind: "CCT", offset: t, cs: it.cs, runway: rwy, side: it.side, tng: it.tng, join: "UP" }),
-        ...autodep,
       ];
   }
 }
@@ -411,6 +384,7 @@ export function sweatboxScript(plan: Pick<SweatboxPlan, "name" | "apt" | "positi
     ...formatHeader({
       name: plan.name,
       airport: plan.apt,
+      position: plan.position,
       view: viewFor(plan.position),
       depRunway: plan.format.dep,
       arrRunways: plan.format.arr,

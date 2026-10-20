@@ -19,8 +19,9 @@ recovered plus placeholders. See `spec/README.md`.
 | `sids.json` | Empty (Appendix D.6). Routes with SID tokens fall back to their fixes. |
 | `aircraft.txt` | Type map from 24RC; wake categories and lengths from ICAO data. |
 | `callsigns.txt` | Spoof airlines from 24RC; real radio callsigns for the common airlines. |
-| `ground/*.json` | `irfd.json`: IRFD's taxi graph, traced from the yellow centrelines of its ground artwork (below), with the holds, stand positions and taxiway names from the IRFD ground chart. It has no drawing layers of its own, so IRFD keeps the old artwork. The pasted spec was cut off before IPPH, which has no ground map yet. |
-| `ground-art/*.json` | Ground drawings (pavement, taxi lines, buildings) for 20 airports from 24RC, used where there is no `ground/` file. IRFD's is shifted by (+0.0408, +0.0344) onto its exact runway thresholds and carries the IRFD chart's runway width, hold bars, taxiway names and stand numbers. IPPH's sits slightly off its exact thresholds. |
+| `ground/*.json` | `irfd.json`: IRFD's taxi graph, traced from the yellow centrelines of its ground artwork (below), with the holds, stand positions and taxiway names from the IRFD ground chart. It has no drawing layers of its own, so IRFD keeps the old artwork. `ipph.json`: Perth's taxi graph (35 stands, 20 holding points), traced from the in-game IPPH ground map and georeferenced on its four runway ends (max error 0.01 NM); IPPH keeps its `ground-art` drawing, shifted onto the same thresholds. |
+| `msa.json` | Minimum safe altitude areas (the scope's `MSA` overlay) for the Perth and central Rockford islands, traced from the ATC24 scope and placed on the coastline (fit error under 0.01 NM). |
+| `ground-art/*.json` | Ground drawings (pavement, taxi lines, buildings) for 20 airports from 24RC, used where there is no `ground/` file. IRFD's is shifted by (+0.0408, +0.0344) onto its exact runway thresholds and carries the IRFD chart's runway width, hold bars, taxiway names and stand numbers. IPPH's is shifted by (+0.022, +0.070) onto its exact thresholds. |
 | `scenarios/*.sbx` | Three development samples (`*-DEMO.sbx`) and `CTR-IRFD-SHOWCASE.sbx` (CTR, TWR and GND traffic at once, every flight on a fix route). The 18 legacy scenarios (Appendix D.10) are missing. |
 
 ## Formats
@@ -48,6 +49,10 @@ twice, the first definition wins (the legacy app had two overlapping tables).
 
 ### `map-outlines.txt`, `map-airspace.txt`
 One SVG path `d` string per line, already in map units.
+
+### `msa.json`
+`{ "areas": [{ "airport": "IPPH", "alt": 1400, "points": [[x, y], ...], "labels": [[x, y]] }] }`. `labels`
+(optional) is where the altitude is written (default: the area's centre).
 
 ### `sectors.json`
 `{ "CODE": { "name": "Rockford FIR", "polygon": [[x, y], ...] } }`

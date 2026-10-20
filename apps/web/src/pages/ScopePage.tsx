@@ -23,6 +23,7 @@ import { routeFor } from "../scope/routes";
 import { switchView } from "../scope/views";
 import type { RAircraft } from "../scope/model";
 import { act } from "../scope/hostbar/act";
+import type { AcademyView } from "@sweatbox/shared";
 
 const SCENARIO_META = new RegExp(cfg.data.scenarioMetaRegex);
 const VIEW_FOR_POSITION: Record<string, "CTR" | "GND" | "TWR"> = { DEL: "GND", GND: "GND", TWR: "TWR", APP: "CTR", CTR: "CTR" };
@@ -36,6 +37,8 @@ export function ScopePage({ code }: { code: string }) {
   const hostPanel = useScope((s) => s.hostPanel);
   const ended = useScope((s) => s.ended);
   const messages = useScope((s) => s.messages);
+  const academyId = useScope((s) => s.snap?.academyId ?? null);
+  const [academy, setAcademy] = useState<AcademyView | null>(null);
   const [endClosed, setEndClosed] = useState(false);
   const [scriptErrors, setScriptErrors] = useState<string[] | null>(null);
   const cmdSeen = useRef(new Set<number>());
@@ -77,6 +80,19 @@ export function ScopePage({ code }: { code: string }) {
     [me?.isHost, code, loadClipboard],
   );
 
+  // an ATC24Academy assessment: its details (the host panel) and the student's way back
+  useEffect(() => {
+    if (!academyId) return setAcademy(null);
+    let live = true;
+    api.academySession(academyId).then(
+      (v) => live && setAcademy(v),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [academyId, ended]);
+
   // session socket
   useEffect(() => {
     if (!me) return;
@@ -114,6 +130,7 @@ export function ScopePage({ code }: { code: string }) {
       apt: s.apt,
       mode: s.mode,
       fixesAlways: s.fixesAlways,
+      msa: s.msa,
       selectedId: s.selectedId,
       notes: s.notes,
       assumed: s.assumed,
@@ -208,7 +225,7 @@ export function ScopePage({ code }: { code: string }) {
       />
       {(mode === "GND" || mode === "TWR") && <StripLists code={code} />}
       <Widgets />
-      {hostPanel && me.isHost && <HostPanel code={code} />}
+      {hostPanel && me.isHost && <HostPanel code={code} academy={academy} onAcademy={setAcademy} />}
       <div className="scope-bottomleft">
         <MessageArea messages={messages} />
         <CommandLine context={context} />
@@ -221,7 +238,7 @@ export function ScopePage({ code }: { code: string }) {
           </a>
         </div>
       )}
-      {ended && !endClosed && <EndScreen stats={ended} onClose={() => setEndClosed(true)} />}
+      {ended && !endClosed && <EndScreen stats={ended} onClose={() => setEndClosed(true)} returnUrl={!me.isHost ? academy?.returnUrl : null} />}
       {scriptErrors && (
         <Modal title="The script has errors" onClose={() => setScriptErrors(null)} footer={<Button onClick={() => setScriptErrors(null)}>Close</Button>}>
           <pre className="data" style={{ margin: 0, whiteSpace: "pre-wrap", color: cfg.colours.log.error }}>

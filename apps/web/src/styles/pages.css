@@ -221,3 +221,63 @@
   border-color: var(--c-muted);
   background: var(--c-hover);
 }
+
+/* ---- ATC24Academy ------------------------------------------------------------------------------ */
+.academy-card {
+  display: grid;
+  gap: var(--sp-4);
+  width: min(560px, 100%);
+  padding: var(--sp-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+  text-align: center;
+}
+.academy-card .summary,
+.academy-text {
+  text-align: left;
+}
+.academy-text h3 {
+  margin-bottom: var(--sp-2);
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.academy-text p,
+.academy-note {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.academy-note {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+}
+.academy-list {
+  width: min(720px, 100%);
+}
+.academy-list h2 {
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-lg);
+}
+.academy-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r);
+}
+.academy-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-sm);
+}
+.academy-list li + li {
+  border-top: 1px solid var(--c-border);
+}
+@media (max-width: 640px) {
+  .academy-list li {
+    flex-wrap: wrap;
+  }
+}

@@ -89,13 +89,10 @@ function fixSteer(ac: Aircraft): number | null {
   return null;
 }
 
-/** Integrate altitude, speed, heading and position for one second (within any separation limits). */
+/** Integrate altitude, speed, heading and position for one second. */
 export function integrate(ac: Aircraft, target: number, forced: "L" | "R" | null = null): void {
-  const lim = ac.sepLimit;
-  const alt = lim ? Math.min(lim.altMax ?? Infinity, Math.max(lim.altMin ?? -Infinity, ac.assigned.alt)) : ac.assigned.alt;
-  const speed = lim?.speedMax !== undefined ? Math.min(ac.assigned.speed, lim.speedMax) : ac.assigned.speed;
-  ac.altitude += clamp(alt - ac.altitude, -S.climbFtPerSec, S.climbFtPerSec);
-  ac.groundSpeed += clamp(speed - ac.groundSpeed, -S.accelKtPerSec, S.accelKtPerSec);
+  ac.altitude += clamp(ac.assigned.alt - ac.altitude, -S.climbFtPerSec, S.climbFtPerSec);
+  ac.groundSpeed += clamp(ac.assigned.speed - ac.groundSpeed, -S.accelKtPerSec, S.accelKtPerSec);
   let diff = angleDiff(ac.heading, target);
   // forced turn direction (holds): go the long way round when needed
   if (forced === "R" && diff < -30) diff += 360;

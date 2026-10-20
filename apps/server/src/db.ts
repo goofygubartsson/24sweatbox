@@ -1,5 +1,5 @@
-// SQLite persistence (better-sqlite3): accounts, auth sessions, encrypted Discord tokens and
-// archived replays. Live sessions themselves stay in memory.
+// SQLite persistence (better-sqlite3): accounts, auth sessions, encrypted Discord tokens, archived
+// replays and the ATC24Academy integration (apps/server/src/academy). Live sessions stay in memory.
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -48,6 +48,85 @@ const MIGRATIONS: string[] = [
      ended_at INTEGER NOT NULL,
      expires_at INTEGER NOT NULL,
      json TEXT NOT NULL
+   );`,
+  // 2: ATC24Academy integration
+  `CREATE TABLE academy_sessions (
+     id TEXT PRIMARY KEY,
+     reference TEXT NOT NULL UNIQUE,
+     student_id TEXT NOT NULL,
+     student_discord_id TEXT NOT NULL,
+     student_username TEXT NOT NULL,
+     course_id TEXT NOT NULL,
+     course_title TEXT NOT NULL,
+     module_id TEXT NOT NULL,
+     module_title TEXT NOT NULL,
+     attempt_id TEXT NOT NULL,
+     attempt_number INTEGER NOT NULL,
+     host_discord_id TEXT NOT NULL,
+     host_name TEXT,
+     scheduled_at INTEGER NOT NULL,
+     assessment_type TEXT,
+     instructions TEXT NOT NULL,
+     passing_criteria TEXT NOT NULL,
+     return_url TEXT NOT NULL,
+     callback_url TEXT NOT NULL,
+     launch_token_enc TEXT NOT NULL,
+     status TEXT NOT NULL,
+     invite_status TEXT NOT NULL,
+     invite_error TEXT,
+     live_code TEXT,
+     student_admitted_at INTEGER,
+     outcome TEXT,
+     score INTEGER,
+     feedback TEXT,
+     completed_at INTEGER,
+     completed_by TEXT,
+     cancel_reason TEXT,
+     cancelled_at INTEGER,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );
+   CREATE INDEX academy_sessions_host ON academy_sessions(host_discord_id, status);
+   CREATE INDEX academy_sessions_live ON academy_sessions(live_code);
+   CREATE TABLE academy_idempotency (
+     key TEXT PRIMARY KEY,
+     request_hash TEXT NOT NULL,
+     session_id TEXT NOT NULL REFERENCES academy_sessions(id),
+     created_at INTEGER NOT NULL
+   );
+   CREATE TABLE academy_launch_tokens (
+     token_hash TEXT PRIMARY KEY,
+     session_id TEXT NOT NULL REFERENCES academy_sessions(id),
+     student_discord_id TEXT NOT NULL,
+     single_use INTEGER NOT NULL,
+     expires_at INTEGER,
+     used_at INTEGER,
+     revoked_at INTEGER,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX academy_launch_tokens_session ON academy_launch_tokens(session_id);
+   CREATE TABLE academy_outbox (
+     event_id TEXT PRIMARY KEY,
+     session_id TEXT NOT NULL REFERENCES academy_sessions(id),
+     type TEXT NOT NULL,
+     url TEXT NOT NULL,
+     body TEXT NOT NULL,
+     status TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     next_attempt_at INTEGER NOT NULL,
+     last_status INTEGER,
+     last_error TEXT,
+     created_at INTEGER NOT NULL,
+     delivered_at INTEGER
+   );
+   CREATE INDEX academy_outbox_due ON academy_outbox(status, next_attempt_at);
+   CREATE UNIQUE INDEX academy_outbox_one_completed ON academy_outbox(session_id) WHERE type = 'session.completed';
+   CREATE TABLE academy_audit (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     at INTEGER NOT NULL,
+     session_id TEXT,
+     action TEXT NOT NULL,
+     detail TEXT
    );`,
 ];
 
@@ -129,6 +208,11 @@ export class Store {
     this.db
       .prepare("INSERT INTO replays (code, ended_at, expires_at, json) VALUES (?, ?, ?, ?) ON CONFLICT(code) DO UPDATE SET ended_at = excluded.ended_at, expires_at = excluded.expires_at, json = excluded.json")
       .run(code, endedAt, expiresAt, json);
+  }
+
+  /** A live (unexpired) archived replay exists for this code. */
+  replayExists(code: string): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM replays WHERE code = ? AND expires_at >= ?").get(code, Date.now()));
   }
 
   getReplay(code: string): string | undefined {

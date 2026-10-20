@@ -15,28 +15,12 @@ export function landingRunway(ac: Aircraft): string | null {
   return ac.approach;
 }
 
-/**
- * On its automatic final at another airport than the session's: no clearance needed there, and it
- * is removed on landing. (At the session's airport it lands like anyone else.)
- */
-const autoLanding = (ac: Aircraft, ctx: SimContext): boolean =>
-  Boolean(ac.autoLand?.rwy && ac.approach === ac.autoLand.rwy && ac.arr !== ctx.airport);
-
 /** TWR mode is the session's own tower: landing clearances are needed only on its airport's runways. */
 const towerRunway = (rwy: string, ctx: SimContext): boolean => !ctx.airport || rwy.startsWith(`${ctx.airport}-`);
 
 /** Step 3 of the tick: airborne at or below 100 ft and not flaring -> landed (or touch-and-go). */
 export function landingCheck(ac: Aircraft, ctx: SimContext): void {
   if (ac.onGround || ac.landing || ac.gone) return;
-  if (autoLanding(ac, ctx)) {
-    // down at its destination (or over the threshold, if it came in high): gone
-    const end = findRunwayEnd(ac.approach!);
-    if (ac.altitude > S.landedBelowFt && !(end && alongTrackNm(appr(end), ac.pos) < 0)) return;
-    ctx.log(`ARRIVED ${ac.callsign} ${ac.arr}`);
-    ctx.counters.arrived++;
-    ac.gone = true;
-    return;
-  }
   if (ac.altitude > S.landedBelowFt) return;
   const rwy = landingRunway(ac);
   // just went around low (climbing away), or low on another circuit leg: not a landing
@@ -86,7 +70,7 @@ export function stepFlare(ac: Aircraft, ctx: SimContext): void {
 
 /** Step 4: TWR mode, approaching without a landing clearance -> go around. */
 export function twrCheck(ac: Aircraft, ctx: SimContext): void {
-  if (!ctx.twrMode || ac.onGround || ac.landing || ac.landClr || ac.gone || autoLanding(ac, ctx)) return;
+  if (!ctx.twrMode || ac.onGround || ac.landing || ac.landClr || ac.gone) return;
   const rwy = landingRunway(ac);
   if (!rwy || !towerRunway(rwy, ctx)) return;
   const end = findRunwayEnd(rwy);

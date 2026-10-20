@@ -15,6 +15,10 @@ import { buildApp, rewriteUrl } from "../src/app";
 import { attachWebSocket } from "../src/ws";
 import { safeNext } from "../src/auth/routes";
 import type { Deps } from "../src/deps";
+import { AcademyService } from "../src/academy/service";
+import { AcademyStore } from "../src/academy/store";
+import { CallbackOutbox } from "../src/academy/outbox";
+import { DiscordHostInviter } from "../src/academy/invite";
 
 let app: FastifyInstance;
 let deps: Deps;
@@ -29,15 +33,18 @@ beforeAll(async () => {
   const store = new Store(":memory:");
   const secrets = new Secrets("test-secret-test-secret-test-secret-0123456789");
   const discord = new DiscordClient(env);
+  const sessions = new SessionManager(store);
+  const outbox = new CallbackOutbox(new AcademyStore(store.db), { secret: "", origin: null });
   deps = {
     env,
     store,
     secrets,
     discord,
     auth: new AuthService(store, env, discord, secrets),
-    sessions: new SessionManager(store),
+    sessions,
     scenarios: new ScenarioLibrary(path.resolve(repoRoot(), "data/scenarios")),
     limiter: new RateLimiter(),
+    academy: new AcademyService(store, sessions, secrets, env, new DiscordHostInviter(discord), outbox),
   };
   app = await buildApp(deps);
   const h = await app.inject({ method: "POST", url: "/api/auth/dev-login", payload: { as: "host", name: "Hosty" } });
@@ -123,9 +130,9 @@ describe("sessions", () => {
   });
 
   it("explains settings that can't be generated", async () => {
-    const gnd = await app.inject({ method: "POST", url: "/api/sessions", headers: auth(hostToken), payload: { generate: { apt: "IPPH", position: "GND", runway: "29" } } });
+    const gnd = await app.inject({ method: "POST", url: "/api/sessions", headers: auth(hostToken), payload: { generate: { apt: "ITKO", position: "GND", runway: "20" } } });
     expect(gnd.statusCode).toBe(409);
-    expect(gnd.json()).toEqual({ error: "IPPH has no ground map yet, so GND sweatboxes aren't available there", code: "REJECTED" });
+    expect(gnd.json()).toEqual({ error: "ITKO has no ground map yet, so GND sweatboxes aren't available there", code: "REJECTED" });
     const irfd = await app.inject({ method: "POST", url: "/api/sessions", headers: auth(hostToken), payload: { generate: { apt: "IRFD", position: "GND", runway: "25" } } });
     expect(irfd.statusCode).toBe(201);
     expect(irfd.json().scriptName).toBe("GND-IRFD-25");

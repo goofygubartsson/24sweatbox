@@ -113,6 +113,17 @@ export const COMMANDS: CommandDef[] = [
       say(`Fixes ${!st.fixesAlways ? "always shown" : "shown when zoomed in"}`);
     },
   },
+  {
+    name: "MSA",
+    aliases: [],
+    args: "",
+    desc: "Show / hide the minimum safe altitudes",
+    run: () => {
+      const st = useScope.getState();
+      st.set({ msa: !st.msa });
+      say(`Minimum safe altitudes ${!st.msa ? "shown" : "hidden"}`);
+    },
+  },
   { name: "QF", aliases: ["FPL"], args: "", desc: "Flight plan readout", run: () => openWidget("qf") },
   {
     name: "C",

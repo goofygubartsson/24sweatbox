@@ -8,6 +8,7 @@ import {
   aviationAngle,
   buildGroundGraph,
   dist,
+  entryNearHold,
   findRunwayEnd,
   fromAviationAngle,
   generateSweatbox,
@@ -19,14 +20,16 @@ import {
   registerGroundMapData,
   registerRunwayPair,
   rwyEnd,
+  samePair,
   scale,
+  shortestPath,
   type RoutableGroundMap,
 } from "@sweatbox/shared";
 import { ITST_GROUND, registerTestAirport } from "@sweatbox/shared/testing/itst";
 import { Session } from "../src/sim/session";
 import { holdBack } from "../src/sim/ground";
-import { separationExempt } from "../src/sim/separation";
 import { HttpError } from "../src/errors";
+import { config } from "@sweatbox/config";
 
 const U = 3.30714286;
 
@@ -530,15 +533,6 @@ describe("ground (ITST test airport)", () => {
     rejects(() => s.hostControl("gnd", a.id, { action: "tkof", runway: "ITSC-09" }), "X 09/27 S is only for crossing, no line-up from there");
   });
 
-  it("AUTO pushes and taxis to the nearest valid hold for the runway", () => {
-    const s = session("[00:00] parked: callsign=AUT1 type=A320 stand=2 level=FL300 route=HDG090 to=IRFD airport=ITST\n[00:01] autodep: callsign=AUT1 runway=ITST-09");
-    run(s, 2);
-    const a = ac(s, "AUT1");
-    expect(a.gnd!.mode).toBe("push");
-    until(s, () => a.gnd!.mode === "holding" && a.gnd!.status.startsWith("HOLDING SHORT"), 4000);
-    expect(a.gnd!.status).toMatch(/^HOLDING SHORT 09\/27 AT B[12]$/);
-  });
-
   it("keeps a one-aircraft-length gap behind traffic", () => {
     const s = session("[00:00] parked: callsign=SP1 type=A320 stand=1 level=FL300 route=HDG090 to=IRFD airport=ITST\n[00:00] parked: callsign=SP2 type=A320 stand=2 level=FL300 route=HDG090 to=IRFD airport=ITST");
     run(s, 1);
@@ -633,6 +627,30 @@ describe("ground (ITST test airport)", () => {
   });
 });
 
+/** Push back, then taxi to the first holding point of `rwy` there is a route to. */
+const toHold = (s: Session, a: ReturnType<typeof ac>, rwy: string) => {
+  const g = getGroundGraph(a.gnd!.apt)!;
+  const pair = findRunwayEnd(rwy)!.pair.pair;
+  // holding points to line up from (with a runway entry beside them), nearest first
+  const holds = g.holds
+    .filter((h) => samePair(h.rwy, pair) && entryNearHold(g, h))
+    .sort((p, q) => dist(g.nodes[p.n]!, a.pos) - dist(g.nodes[q.n]!, a.pos));
+  // push facing a way that leads to one of them (not into a dead end)
+  const stand = g.standByName.get(a.gnd!.stand!)!;
+  const facing = a.gnd!.pushFacing.find((o) => holds.some((h) => shortestPath(g, stand.j, h.n, { forbidFirstEdge: o.edge })));
+  s.hostControl("gnd", a.id, { action: "push", ...(facing ? { facing: facing.hdg } : {}) });
+  until(s, () => a.gnd!.mode === "holding", 600);
+  for (const h of holds) {
+    try {
+      s.hostControl("gnd", a.id, { action: "taxi", route: [], target: `H:${h.name}` });
+      return;
+    } catch {
+      // no route to that one: the next
+    }
+  }
+  throw new Error(`no holding point for ${rwy} reachable from ${a.callsign}`);
+};
+
 describe("ground (IRFD)", () => {
   const ends = ["IRFD-07L", "IRFD-25R", "IRFD-07C", "IRFD-25C", "IRFD-07R", "IRFD-25L"];
   /** Run until pred, clearing the aircraft across each runway it stops short of (as a controller would). */
@@ -646,13 +664,14 @@ describe("ground (IRFD)", () => {
       max,
     );
 
-  it("every stand pushes back and AUTO-taxis to a holding point, then lines up and takes off", () => {
+  it("every stand pushes back and taxis to a holding point, then lines up and takes off", () => {
     for (let k = 1; k <= 20; k++) {
       const rwy = ends[k % ends.length]!;
-      const s = session(`[00:00] parked: callsign=DEP${k} type=A320 stand=${k} level=FL300 route=HDG090 to=IPPH\n[00:01] autodep: callsign=DEP${k} runway=${rwy}`);
+      const s = session(`[00:00] parked: callsign=DEP${k} type=A320 stand=${k} level=FL300 route=HDG090 to=IPPH`);
       run(s, 2);
       const a = ac(s, `DEP${k}`);
-      untilCrossing(s, a, () => a.gnd!.mode === "holding" && a.gnd!.status.startsWith("HOLDING SHORT"), 6000);
+      toHold(s, a, rwy);
+      untilCrossing(s, a, () => a.gnd!.mode === "holding" && a.gnd!.status.startsWith("HOLDING SHORT") && !a.gnd!.path.length, 6000);
       // stopped with the nose behind the red line
       const bar = getGroundGraph("IRFD")!.nodes[a.gnd!.node!]!;
       expect(dist(a.pos, bar), `stand ${k}`).toBeGreaterThanOrEqual(lengthUnits(a.type) / 2);
@@ -675,69 +694,40 @@ describe("ground (IRFD)", () => {
       }
   });
 
-  /** Closest two ground aircraft came while either was moving off its stand (collision check). */
-  const closestApproach = (s: Session, ticks: number, each?: () => void) => {
-    let min = Infinity;
-    let pair = "";
-    for (let i = 0; i < ticks; i++) {
-      each?.();
-      s.tick();
-      const moving = s.aircraft.filter((x) => x.onGround && x.gnd && !["stand", "takeoff", "lineup", "lined", "rollout"].includes(x.gnd.mode));
-      const ground = s.aircraft.filter((x) => x.onGround && x.gnd);
-      for (const a of moving)
-        for (const b of ground) {
-          if (a === b) continue;
-          const d = dist(a.pos, b.pos);
-          if (d < min) {
-            min = d;
-            pair = `${a.callsign} (${a.gnd!.status}) / ${b.callsign} (${b.gnd!.status}) at ${s.elapsedSec}s`;
-          }
-        }
-    }
-    return { min, pair };
-  };
-
-  it("DEL: every stand starts occupied; cleared aircraft push, taxi, cross and depart by themselves", () => {
+  it("DEL: every stand starts occupied; a cleared departure leaves a minute after its clearance", () => {
     const g = getGroundGraph("IRFD")!;
     const s = session(generateSweatbox({ apt: "IRFD", position: "DEL", runway: "25" }).text);
+    expect(s.position).toBe("DEL");
     run(s, 2);
     const parked = s.aircraft.filter((x) => x.gnd?.mode === "stand");
     expect(parked.length).toBe(g.stands.length);
-    expect(parked.every((x) => x.gnd!.status.endsWith("AWAITING CLEARANCE"))).toBe(true);
     // nothing moves without a clearance
     run(s, 120);
     expect(s.aircraft.filter((x) => x.gnd?.mode === "stand").length).toBe(g.stands.length);
-    // clear them all at once: each pushes 20 s after its clearance (no log line about it), when safe
-    for (const x of parked) s.setStrip(x.callsign, "c", "1");
-    run(s, 15);
-    expect(s.aircraft.some((x) => x.gnd?.mode === "push")).toBe(false);
-    expect(logs(s).some((l) => /pushing back/i.test(l))).toBe(false);
-    const departed = new Map<string, string>();
-    let queueMax = 0;
-    let closest = Infinity;
-    const { min, pair } = closestApproach(s, 45 * 60, () => {
-      const queue: Record<string, number> = {};
-      for (const x of s.aircraft) {
-        if (x.gnd && !x.gnd.arrival && x.gnd.rwy && ["push", "taxi", "holding", "lineup", "lined"].includes(x.gnd.mode)) queue[x.gnd.rwy] = (queue[x.gnd.rwy] ?? 0) + 1;
-        if (!x.onGround && x.dep && !departed.has(x.callsign)) departed.set(x.callsign, x.dep.rwy);
-      }
-      queueMax = Math.max(queueMax, ...Object.values(queue));
-      // aircraft flying on their own keep 1 NM / 1000 ft
-      const air = s.aircraft.filter((x) => !x.onGround && !x.landing);
-      for (const a of air)
-        for (const b of air)
-          if (a !== b && a.autoFlight !== null && !separationExempt(a, b) && Math.abs(a.altitude - b.altitude) < 1000) closest = Math.min(closest, dist(a.pos, b.pos) / U);
-    });
-    expect(departed.size).toBeGreaterThanOrEqual(9);
-    // 25L (IRFD's main departure runway) first; with five queued there, the next runways set
-    expect([...new Set(departed.values())].sort()).toEqual(["IRFD-25C", "IRFD-25L", "IRFD-25R"]);
-    expect(queueMax).toBeLessThanOrEqual(5);
-    expect(closest).toBeGreaterThan(0.75); // (the minimum, give or take turns the look-ahead doesn't model)
-    // never closer than about half an aircraft length to anyone while moving on the ground
-    expect(min, pair).toBeGreaterThan(0.02);
+    const [first, second] = parked as [ReturnType<typeof ac>, ReturnType<typeof ac>];
+    s.setStrip(first.callsign, "c", "1");
+    s.setStrip(second.callsign, "c", "1");
+    run(s, 30);
+    s.setStrip(second.callsign, "c", ""); // clearance taken back: it stays
+    run(s, 29);
+    expect(s.byCallsign(first.callsign)).toBeDefined();
+    expect(first.gnd!.mode).toBe("stand"); // it never moves by itself
+    run(s, 2);
+    expect(s.byCallsign(first.callsign)).toBeUndefined();
+    expect(s.byCallsign(second.callsign)).toBeDefined();
     // freed stands get the next aircraft from the queue
+    run(s, config.ground.standRefillSec + 30);
     expect(s.counters.spawned).toBeGreaterThan(g.stands.length);
-  }, 120_000);
+  });
+
+  it("only DEL sweatboxes remove cleared aircraft", () => {
+    const s = session(generateSweatbox({ apt: "IRFD", position: "GND", runway: "25" }).text);
+    run(s, 2);
+    const a = s.aircraft.find((x) => x.gnd?.mode === "stand")!;
+    s.setStrip(a.callsign, "c", "1");
+    run(s, 120);
+    expect(s.byCallsign(a.callsign)).toBeDefined();
+  });
 
   it("GND: every stand starts occupied and arrivals keep coming", () => {
     const g = getGroundGraph("IRFD")!;
@@ -759,21 +749,82 @@ describe("ground (IRFD)", () => {
   });
 });
 
-describe("takeoff release, runway overflow, automatic separation", () => {
+describe("ground (IPPH)", () => {
+  const ends = ["IPPH-29", "IPPH-11", "IPPH-33", "IPPH-15"];
+  const cross = (s: Session, a: ReturnType<typeof ac>, pred: () => boolean, max: number) =>
+    until(
+      s,
+      () => {
+        if (a.gnd?.paused && a.gnd.status.startsWith("HOLD SHORT ")) s.hostControl("gnd", a.id, { action: "cont" });
+        return pred();
+      },
+      max,
+    );
+
+  it("every stand pushes back and taxis to a holding point, then lines up and takes off", () => {
+    const g = getGroundGraph("IPPH")!;
+    expect(g.stands.length).toBe(35);
+    g.stands.forEach((st, k) => {
+      const rwy = ends[k % ends.length]!;
+      const s = session(`[sweatbox]
+airport = IPPH
+[00:00] parked: callsign=DEP${k} type=A320 stand=${st.name} level=FL300 route=ROM,GAVIN,SETHR to=IRFD`);
+      run(s, 2);
+      const a = ac(s, `DEP${k}`);
+      toHold(s, a, rwy);
+      cross(s, a, () => a.gnd!.mode === "holding" && a.gnd!.status.startsWith("HOLDING SHORT") && !a.gnd!.path.length, 8000);
+      const bar = g.nodes[a.gnd!.node!]!;
+      expect(dist(a.pos, bar), `stand ${st.name}`).toBeLessThan(holdBack(a) + 0.002);
+      s.hostControl("gnd", a.id, { action: "tkof", runway: rwy });
+      until(s, () => !a.onGround, 3000);
+    });
+  });
+
+  it("arrivals on every runway roll out, vacate and taxi to a stand", () => {
+    for (const rwy of ends)
+      for (const r of [0.05, 0.95]) {
+        const a0 = appr(findRunwayEnd(rwy)!);
+        const p = add(a0.threshold, scale(a0.out, 6 * U));
+        const s = session(`[sweatbox]
+airport = IPPH
+after landing = stand
+[00:00] airborne: callsign=ARR1 type=A320 position=${p.x},${p.y} altitude=1900 speed=140 level=FL300 route=HDG${String(Math.round(aviationAngle(scale(a0.out, -1)))).padStart(3, "0")} from=IRFD to=IPPH
+[00:00] approach: callsign=ARR1 runway=${rwy}`, () => r);
+        run(s, 2);
+        const a = ac(s, "ARR1");
+        until(s, () => a.onGround, 3000);
+        cross(s, a, () => a.gnd!.mode === "stand", 8000);
+      }
+  });
+
+  it("DEL and GND sweatboxes are generated for Perth", () => {
+    for (const position of ["DEL", "GND"] as const) {
+      const s = session(generateSweatbox({ apt: "IPPH", position, runway: "29" }).text);
+      run(s, 2);
+      expect(s.aircraft.filter((x) => x.gnd?.mode === "stand").length, position).toBe(35);
+      run(s, 10 * 60);
+      expect(logs(s).filter((l) => /error|cannot|unknown|no route|not parked/i.test(l)), position).toEqual([]);
+    }
+  });
+});
+
+describe("takeoff release, routes, TWR clearances", () => {
   const parked = (n: number, from = 1) =>
     Array.from({ length: n }, (_, k) => `[00:00] parked: callsign=TK${k + 1} type=A320 stand=${from + k} level=FL240 route=MOGTA to=IGAR`).join("\n");
   const header = "[sweatbox]\nairport = IRFD\nview = GND\ndeparture runway = 25L\narrival runways = 25C, 25R\n";
 
   it("one takeoff at a time: the next rolls only once the one before is airborne above 100 ft", () => {
     // two holding points, two parallel runways (TK2 crosses 25L to 25C when told to)
-    const s = session(`${header}${parked(2)}\n[00:01] autodep: callsign=TK1 runway=25L\n[00:01] autodep: callsign=TK2 runway=25C`);
+    const s = session(`${header}${parked(2)}`);
     run(s, 2);
+    toHold(s, ac(s, "TK1"), "IRFD-25L");
+    toHold(s, ac(s, "TK2"), "IRFD-25C");
     until(
       s,
       () => {
         const b = ac(s, "TK2");
         if (b.gnd?.paused && b.gnd.status.startsWith("HOLD SHORT")) s.hostControl("gnd", b.id, { action: "cont" });
-        return ["TK1", "TK2"].every((cs) => ac(s, cs).gnd?.mode === "holding" && !ac(s, cs).gnd!.auto);
+        return ["TK1", "TK2"].every((cs) => ac(s, cs).gnd?.mode === "holding" && !ac(s, cs).gnd!.path.length);
       },
       4000,
     );
@@ -804,104 +855,22 @@ describe("takeoff release, runway overflow, automatic separation", () => {
     expect(waited).toBe(true);
   });
 
-  it("automatic departures use the next runway set once five are queued for theirs", () => {
-    const s = session(`${header}${parked(8)}\n${Array.from({ length: 8 }, (_, k) => `[00:01] autodep: callsign=TK${k + 1} runway=25L`).join("\n")}`);
-    let max25L = 0;
-    run(s, 2);
-    until(
-      s,
-      () => {
-        const q = s.aircraft.filter((x) => x.gnd?.rwy === "IRFD-25L" && x.gnd.mode !== "stand").length;
-        max25L = Math.max(max25L, q);
-        return s.aircraft.every((x) => x.gnd?.mode !== "stand");
-      },
-      6000,
-    );
-    expect(max25L).toBe(5);
-    expect(s.aircraft.filter((x) => x.gnd?.rwy === "IRFD-25C").length).toBe(3);
-  });
-
-  it("an aircraft flying on its own levels off 1000 ft below crossing traffic", () => {
-    // A climbs toward B's level; B crosses its track at 3000 ft
-    const s = session(
-      "[00:00] airborne: callsign=AUTO1 type=A320 position=0,0 altitude=1500 speed=250 level=FL240 route=HDG090 from=IRFD to=IZOL\n" +
-        "[00:00] assign: callsign=AUTO1 altitude=3000\n" +
-        "[00:00] airborne: callsign=TFC1 type=A320 position=12,-6 altitude=3000 speed=250 level=FL240 route=HDG180 from=IPPH to=IRFD",
-    );
-    run(s, 1);
-    ac(s, "AUTO1").autoFlight = 0; // as after a ground departure
-    let worst = Infinity;
-    for (let i = 0; i < 300; i++) {
-      s.tick();
-      const [a, b] = [ac(s, "AUTO1"), ac(s, "TFC1")];
-      if (Math.abs(a.altitude - b.altitude) < 1000) worst = Math.min(worst, dist(a.pos, b.pos) / U);
-    }
-    expect(worst).toBeGreaterThanOrEqual(1);
-    expect(logs(s).some((l) => l.startsWith("SEPARATION LOSS"))).toBe(false);
-    // and carries on to its cleared level once clear
-    run(s, 300);
-    expect(ac(s, "AUTO1").altitude).toBe(3000);
-    expect(ac(s, "AUTO1").sepLimit).toBeNull();
-  });
-
-  it("an aircraft flying on its own slows down behind slower traffic on its track", () => {
-    const s = session(
-      "[00:00] airborne: callsign=AUTO2 type=A320 position=0,0 altitude=3000 speed=250 level=FL240 route=HDG090 from=IRFD to=IZOL\n" +
-        "[00:00] airborne: callsign=TFC2 type=A320 position=6,0 altitude=3000 speed=180 level=FL240 route=HDG090 from=IRFD to=IZOL",
-    );
-    run(s, 1);
-    ac(s, "AUTO2").autoFlight = 0;
-    let worst = Infinity;
-    for (let i = 0; i < 400; i++) {
-      s.tick();
-      const [a, b] = [ac(s, "AUTO2"), ac(s, "TFC2")];
-      if (Math.abs(a.altitude - b.altitude) < 1000) worst = Math.min(worst, dist(a.pos, b.pos) / U);
-    }
-    expect(worst).toBeGreaterThanOrEqual(1);
-    // a controller's instruction ends it
-    s.hostControl("air", ac(s, "AUTO2").id, { spd: 250 });
-    expect(ac(s, "AUTO2").autoFlight).toBeNull();
-    expect(ac(s, "AUTO2").sepLimit).toBeNull();
-  });
-
-  it("a departure to another airport flies its route, lands there and is removed", () => {
+  it("a departure flies its fix route toward its destination and is removed close to it", () => {
     const s = session("[00:00] departing: callsign=QFA1 type=B738 runway=25L climb=3000 level=FL240 route=SETHR,GAVIN,VOX to=IPPH");
-    let final = "";
+    let landed = false;
     run(s, 1);
     until(
       s,
       () => {
         const x = s.byCallsign("QFA1");
-        if (x?.approach) final = x.approach;
+        if (x?.approach) landed = true;
         return !x;
       },
       4000,
     );
-    expect(final).toMatch(/^IPPH-/);
+    expect(landed).toBe(false); // nothing lands by itself
     expect(logs(s)).toContain("ARRIVED QFA1 IPPH");
     expect(s.counters.arrived).toBe(1);
-  });
-
-  it("autoland: an arrival flies its fixes, lands on an arrival runway of the session airport and taxis to a stand", () => {
-    const s = session(
-      `${header}after landing = stand\n` +
-        "[00:00] airborne: callsign=QTR8 type=A359 position=12,-8.24 altitude=6000 speed=250 level=FL060 route=GAVIN,SETHR from=IPPH to=IRFD\n" +
-        "[00:00] autoland: callsign=QTR8",
-    );
-    run(s, 1);
-    const q = ac(s, "QTR8");
-    expect(q.fixList.map((f) => f.name)).toEqual(["GAVIN", "SETHR"]);
-    expect(q.autoFlight).not.toBeNull();
-    until(s, () => q.onGround, 4000);
-    expect(logs(s).find((l) => l.startsWith("LANDED QTR8"))).toMatch(/LANDED QTR8 IRFD-25[CR]$/);
-    until(s, () => q.gnd?.mode === "taxi" || q.gnd?.mode === "stand" || /HOLD SHORT/.test(q.gnd?.status ?? ""), 2000);
-  });
-
-  it("autodep takeoff=auto: pushes, taxis, lines up and departs without a clearance", () => {
-    const s = session(`${header}[00:00] parked: callsign=RYR1 type=B738 stand=3 level=FL250 route=LAVNO,ANYMS to=ISKP\n[00:01] autodep: callsign=RYR1 runway=25L takeoff=auto`);
-    run(s, 2);
-    until(s, () => !ac(s, "RYR1").onGround, 3000);
-    expect(logs(s)).toContain("DEPARTED RYR1 IRFD-25L");
   });
 
   it("TWR mode asks for landing clearances only on the session airport's runways", () => {

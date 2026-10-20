@@ -4,13 +4,7 @@ import { config } from "@sweatbox/config";
 import {
   add,
   airportRef,
-  alongTrackNm,
   angleDiff,
-  appr,
-  dot,
-  fromAviationAngle,
-  samePair,
-  sub,
   aviationAngle,
   bearing,
   dist,
@@ -19,7 +13,6 @@ import {
   isSidToken,
   routeHeading,
   routeTokens,
-  runwayEndNames,
   rwyEnd,
   scale,
   wakeOf,
@@ -28,8 +21,6 @@ import {
 import type { Aircraft } from "./types";
 import type { SimContext } from "./context";
 import { parkAtStand, stripClimb } from "./ground";
-import { glideAltitude } from "./air";
-import { approachConflict, turnsBack } from "./separation";
 
 const S = config.sim;
 
@@ -58,9 +49,6 @@ export function blankAircraft(cs: string, type: string, pos: Vec): Aircraft {
     hold: null,
     dep: null,
     homing: false,
-    autoLand: null,
-    autoFlight: null,
-    sepLimit: null,
     arr: null,
     gnd: null,
     landing: null,
@@ -168,8 +156,7 @@ export function departureJoin(ac: Aircraft, ctx: SimContext): void {
   // a route that starts behind it: climb straight out to the cleared altitude before turning back
   // over the airport (above the departures climbing out after it)
   const first = ex.heading === null ? ex.points[0] : undefined;
-  const cleared = Math.min(ac.assigned.alt, ac.sepLimit?.altMax ?? Infinity);
-  if (first && turnsBack(ac.heading, ac.pos, first.pos) && ac.altitude < cleared - 50) return;
+  if (first && Math.abs(angleDiff(ac.heading, bearing(ac.pos, first.pos))) > 90 && ac.altitude < ac.assigned.alt - 50) return;
   dep.joined = true;
   if (ex.unknown.length) ctx.log(`${ac.callsign}: unknown route element(s) ${ex.unknown.join(" ")}`, "warn");
   if (ex.heading !== null) {
@@ -179,116 +166,11 @@ export function departureJoin(ac: Aircraft, ctx: SimContext): void {
   ac.fixList = ex.points;
   if (ex.sid) ac.fp.sid = ex.sid;
   ac.homing = Boolean(ac.arr && ac.arr !== apt);
-  // to another airport with runways: land there at the end of the route
-  ac.autoLand = ac.homing && runwayEndNames(ac.arr!).length ? { rwy: null } : null;
 }
 
-const finalPoint = (rwy: string): Vec => {
-  const a = appr(findRunwayEnd(rwy)!);
-  return add(a.threshold, scale(a.out, S.autoLandFinalNm * S.unitsPerNm));
-};
-
-/**
- * The destination runway end whose final is easiest to join from here: little turn, not far, not
- * busy. At the session's airport only its arrival runways ([sweatbox] arrival runways); elsewhere
- * the one already in use, if any.
- */
-function finalFor(apt: string, pos: Vec, ctx: SimContext): string | null {
-  const cfg = ctx.runwayConfig;
-  const here = cfg && cfg.apt === apt && cfg.arr.length ? cfg.arr.map((d) => `${apt}-${d}`).filter((n) => findRunwayEnd(n)) : [];
-  const busy = (name: string) => ctx.aircraft.filter((o) => !o.gone && !o.onGround && (o.approach === name || o.autoLand?.rwy === name)).length;
-  // elsewhere: the runway already in use there, so nobody lands on a crossing runway at the same time
-  if (!here.length) {
-    const inUse = runwayEndNames(apt)
-      .map((name) => ({ name, n: busy(name) }))
-      .filter((r) => r.n > 0)
-      .sort((p, q) => q.n - p.n)[0];
-    if (inUse) return inUse.name;
-  }
-  let best: string | null = null;
-  let bestScore = Infinity;
-  for (const name of here.length ? here : runwayEndNames(apt)) {
-    const p = finalPoint(name);
-    const turn = Math.abs(angleDiff(bearing(pos, p), appr(findRunwayEnd(name)!).course));
-    // 1 NM further = 3 degrees less turn; each aircraft already on (or heading for) it = 15 degrees
-    const score = turn + (dist(pos, p) / S.unitsPerNm) * 3 + busy(name) * 15;
-    if (score < bestScore) [best, bestScore] = [name, score];
-  }
-  return best;
-}
-
-/**
- * Not yet: someone on this final less than autoLandGapNm past its final point, or traffic it would
- * come inside the separation minimum of on the way down.
- */
-function finalBusy(ac: Aircraft, ctx: SimContext, rwy: string): boolean {
-  const a = appr(findRunwayEnd(rwy)!);
-  const close = ctx.aircraft.some(
-    (o) => o !== ac && !o.gone && !o.onGround && !o.landing && o.approach === rwy && alongTrackNm(a, o.pos) > S.autoLandFinalNm - S.autoLandGapNm,
-  );
-  return close || approachConflict(ac, ctx, rwy, finalPoint(rwy)) !== null;
-}
-
-/**
- * Hold beside the final point until the final is clear: autoLandHoldOffsetNm to the side away from
- * the airport's other runways (the session's other arrival runways at its own airport), inbound
- * along the final course, turning away from the final.
- */
-function holdAtFinal(ac: Aircraft, ctx: SimContext, rwy: string): void {
-  const end = findRunwayEnd(rwy)!;
-  const a = appr(end);
-  const crs = Math.round(a.course) || 360;
-  const right = fromAviationAngle(crs + 90);
-  const cfg = ctx.runwayConfig;
-  const others = (cfg && cfg.apt === end.icao && cfg.arr.length > 1 ? cfg.arr.map((d) => `${end.icao}-${d}`) : runwayEndNames(end.icao))
-    .map((n) => findRunwayEnd(n))
-    .filter((e): e is NonNullable<typeof e> => Boolean(e) && e!.name !== end.name && !samePair(e!.pair.pair, end.pair.pair));
-  const offset = others.reduce((sum, e) => sum + dot(sub(appr(e).threshold, a.threshold), right), 0);
-  const dir = offset > 0 ? "L" : "R"; // the others on the right: hold on the left
-  const side = fromAviationAngle(crs + (dir === "R" ? 90 : -90), S.autoLandHoldOffsetNm * S.unitsPerNm);
-  ac.fixList = [];
-  ac.hold = { fix: rwy, pos: add(finalPoint(rwy), side), crs, dir, leg: S.hold.defaultLegSec, ph: "entry", turnTo: (crs + 180) % 360, next: "out", t: 0, resume: [] };
-}
-
-/**
- * End of an auto-landing departure's route: fly to a point on a final at the destination, then
- * the approach from there (landing.ts removes it on touchdown); hold there while the aircraft ahead
- * is still close. False when there is no runway.
- */
-function joinFinal(ac: Aircraft, ctx: SimContext): boolean {
-  const al = ac.autoLand!;
-  if (al.rwy && dist(ac.pos, finalPoint(al.rwy)) <= 2 * S.fixPassNm * S.unitsPerNm) {
-    if (finalBusy(ac, ctx, al.rwy)) holdAtFinal(ac, ctx, al.rwy);
-    else {
-      ac.approach = al.rwy;
-      ac.apprCaptured = false;
-    }
-    return true;
-  }
-  al.rwy = finalFor(ac.arr!, ac.pos, ctx);
-  if (!al.rwy) return false;
-  ac.fixList = [{ name: al.rwy, pos: finalPoint(al.rwy) }];
-  ac.assigned.alt = Math.min(ac.assigned.alt, Math.round(glideAltitude(S.autoLandFinalNm) / 100) * 100);
-  ac.assigned.speed = Math.min(ac.assigned.speed, S.autoLandSpeedKt);
-  return true;
-}
-
-/**
- * After-tick pass at the end of a homing aircraft's route: departures to another airport join a
- * final there; the others are logged ARRIVED and removed within arrivalRemoveNm of the destination.
- */
+/** After-tick pass: homing aircraft within arrivalRemoveNm of their destination are logged ARRIVED and removed. */
 export function arrivalCheck(ac: Aircraft, ctx: SimContext): void {
-  const al = ac.autoLand;
-  if (ac.homing && al?.rwy && ac.hold?.fix === al.rwy) {
-    // holding at its final point: once the final is clear, back to the point and onto the approach
-    if (!finalBusy(ac, ctx, al.rwy)) {
-      ac.hold = null;
-      ac.fixList = [{ name: al.rwy, pos: finalPoint(al.rwy) }];
-    }
-    return;
-  }
   if (!ac.homing || !ac.arr || ac.onGround || ac.fixList.length || ac.approach || ac.cct || ac.hold) return;
-  if (al && joinFinal(ac, ctx)) return;
   const ref = airportRef(ac.arr);
   if (ref && dist(ac.pos, ref) <= S.arrivalRemoveNm * S.unitsPerNm) {
     ctx.log(`ARRIVED ${ac.callsign} ${ac.arr}`);

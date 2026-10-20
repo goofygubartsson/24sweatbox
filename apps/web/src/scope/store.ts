@@ -41,6 +41,8 @@ interface ScopeState {
   mode: ViewMode;
   ctrCamera: { cx: number; cy: number; zoom: number } | null;
   fixesAlways: boolean;
+  /** Minimum safe altitude areas shown (.MSA). */
+  msa: boolean;
   selectedId: string | null;
   notes: Record<string, TagNote>;
   assumed: Set<string>;
@@ -85,6 +87,7 @@ export const useScope = create<ScopeState>((set, get) => ({
   mode: "CTR",
   ctrCamera: null,
   fixesAlways: false,
+  msa: false,
   selectedId: null,
   notes: {},
   assumed: new Set(),

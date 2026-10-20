@@ -437,7 +437,7 @@ function Maker() {
 function summary(d: MakerDraft, it: SweatboxItem): string {
   switch (it.kind) {
     case "dep-stand":
-      return `Stand ${it.stand} → ${it.runway} → ${it.arr}${it.autoDelay === null ? "" : `, taxis at +${it.autoDelay}s`}`;
+      return `Stand ${it.stand} → ${it.runway} → ${it.arr}`;
     case "dep-air":
       return `Departs ${it.runway} → ${it.arr}`;
     case "arr-final":
@@ -486,20 +486,6 @@ function Editor({ draft, item, onChange }: { draft: MakerDraft; item: SweatboxIt
       </select>
     </>
   );
-  const auto = (
-    <>
-      <label htmlFor="ed-auto">Taxis after (s)</label>
-      <input
-        id="ed-auto"
-        type="number"
-        min={0}
-        className="field"
-        placeholder="waits for instructions"
-        value={item.autoDelay ?? ""}
-        onChange={(e) => onChange({ autoDelay: e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))) })}
-      />
-    </>
-  );
   return (
     <section className="maker__section">
       <h2>{KINDS[item.kind]}</h2>
@@ -513,7 +499,6 @@ function Editor({ draft, item, onChange }: { draft: MakerDraft; item: SweatboxIt
           <>
             {stand}
             {runway}
-            {auto}
             {num("climb", "Climb (ft)", 500)}
             {text("arr", "Destination")}
           </>
@@ -544,7 +529,6 @@ function Editor({ draft, item, onChange }: { draft: MakerDraft; item: SweatboxIt
           <>
             {stand}
             {runway}
-            {auto}
             <label>Side</label>
             <span className="seg">
               {(["L", "R"] as const).map((s) => (

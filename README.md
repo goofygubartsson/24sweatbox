@@ -58,6 +58,12 @@ User instructions are in [`docs/user-guide.md`](docs/user-guide.md).
 Who can log in, and who is a host, is configured in `sweatbox.config.ts` (`discord.guildId`,
 `hostRoleIds`, `ownerIds`).
 
+## ATC24Academy integration
+
+The ATC24Academy website books practical assessments here and receives signed pass / fail results.
+Setup, the API, launch links, the callback outbox and key rotation are in
+[docs/academy-integration.md](docs/academy-integration.md).
+
 ## Commands
 
 | Command | What it does |
@@ -65,9 +71,12 @@ Who can log in, and who is a host, is configured in `sweatbox.config.ts` (`disco
 | `pnpm dev` | API + web with reload |
 | `pnpm build` | Build the server (`apps/server/dist`) and the web app (`apps/web/dist`) |
 | `pnpm start` | Run the built server (`NODE_ENV=production`: needs the Discord settings in `.env`) |
+| `pnpm serve` | Production server + web app on `127.0.0.1:3000`, restarted if it stops (for a tunnel) |
+| `pnpm autostart` | Windows: start `pnpm serve` with Windows (see Deploy) |
 | `pnpm test` | Unit and API tests (Vitest) in every package |
 | `pnpm typecheck` | `tsc` in every package |
 | `pnpm e2e` | Playwright end-to-end tests (first run: `pnpm exec playwright install chromium`) |
+| `pnpm academy keys` | New ATC24Academy API key and webhook secret (also `outbox`, `retry`: see the integration doc) |
 | `pnpm data` | Rebuild `packages/shared/src/data/*.json` from `/data` (runs before dev, build and test) |
 
 ## Generated sweatboxes
@@ -79,12 +88,11 @@ builds the `.sbx` script with `packages/shared/src/generator.ts` and loads it im
 other knobs are in `generator` in `sweatbox.config.ts`. DEL and GND need the airport's ground map
 and are refused (409, with the reason) where there is none. They start with every stand occupied
 and refill freed stands (`parked: … stand=any`); GND runs at `rateByPosition.GND` times the normal
-traffic, with arrivals spaced by `arrivalSpacingNm`. DEL departures leave by themselves once the
-strip is cleared (`autodep: … when=cleared`). TWR also fills every stand where there is a ground
-map; the parked aircraft push and taxi to the departure runway one after another (`autodep`,
-`twrFirstPushSec` and one every 60 / (`perMinute` x `rateByPosition.TWR`) s) and nothing is spawned
-on a runway. Departures get a route of real fixes toward their destination (`routeFixEveryNm`),
-land there by themselves and keep their own separation on the way (`sim.autoSep`).
+traffic, with arrivals spaced by `arrivalSpacingNm`. DEL files say `position = DEL`: a cleared departure is removed a
+minute after its clearance (`ground.delRemoveAfterClearSec`). TWR also fills every stand where
+there is a ground map, and nothing is spawned on a runway. Departures get a route of real fixes
+toward their destination (`routeFixEveryNm`). Nothing moves or lands by itself: aircraft do what
+the file and the controllers tell them.
 
 ## Configuration
 
@@ -95,7 +103,8 @@ startup and stops with a clear message if a value is wrong. The web app only get
 subset, baked in at build time (the build fails if browser code imports the full config).
 
 `.env` holds secrets and per-machine overrides only: `DISCORD_*`, `SESSION_SIGNING_SECRET`,
-`PORT`, `NODE_ENV`, plus `BIND_HOST`, `SERVE_WEB`, `DB_PATH` and `DEV_FAKE_USER`.
+`PORT`, `NODE_ENV`, plus `BIND_HOST`, `SERVE_WEB`, `DB_PATH`, `DEV_FAKE_USER` and the
+ATC24Academy settings (`ACADEMY_*`).
 
 ## Deploy
 
@@ -114,6 +123,32 @@ Sessions live in memory, so run a single instance.
 **Docker:** `docker build -t sweatbox .` then
 `docker run -p 3000:3000 --env-file .env -v sweatbox-var:/app/var sweatbox`.
 The container also serves the web app (`SERVE_WEB=1`). The Dockerfile has not been built in CI yet.
+
+**Windows + Cloudflare Tunnel** (one machine, no Caddy):
+
+```powershell
+pnpm install
+pnpm autostart                        # build, then start with Windows (asks for admin once)
+winget install --id Cloudflare.cloudflared
+pnpm autostart -TunnelToken <token>   # optional: cloudflared as a service too
+```
+
+`pnpm autostart` installs a Windows startup task ("ATC24Academy Sweatbox", runs as SYSTEM before
+anyone logs in) that runs `scripts/serve.mjs`: the production server with the web app on
+`http://127.0.0.1:3000` only, restarted if it stops, logging to `var/logs/sweatbox.log`. In the
+Cloudflare Zero Trust dashboard, give the tunnel a public hostname (`sb.atc24academy.com`) with the
+service `http://localhost:3000`; the WebSocket works through it. The Discord redirect
+(`DISCORD_REDIRECT_URI`) and `app.publicUrl` must match that hostname.
+
+| Command | |
+|---|---|
+| `pnpm autostart -Status` | Task state, health and the end of the log |
+| `pnpm autostart -Restart` | Rebuild and restart (after changing code or `.env`) |
+| `pnpm autostart -Stop` / `-Uninstall` | Stop it until the next boot / remove the task |
+| `pnpm serve` | The same server in this terminal, without the task (`--build` rebuilds first) |
+
+It takes port 3000, so stop it (`pnpm autostart -Stop`) before `pnpm dev`. If the folder is in
+OneDrive, mark it "Always keep on this device" so the files are there before anyone logs in.
 
 ## Layout
 

@@ -53,9 +53,6 @@ export function airControl(ac: Aircraft, body: AirBody, ctx: SimContext): Contro
     return { act: "DEL", value: "DELETED" };
   }
   if (ac.onGround) throw reject("Aircraft is on the ground");
-  // a controller's instruction: no longer flying (and separating) on its own
-  ac.autoFlight = null;
-  ac.sepLimit = null;
   if (body.alt !== undefined) {
     ac.assigned.alt = body.alt;
     ac.approach = null;
@@ -102,8 +99,6 @@ export function gndControl(ac: Aircraft, body: GndBody, ctx: SimContext): Contro
   if (!ac.onGround || !ac.gnd) throw reject("Aircraft is not on the ground");
   if (!config.features.ground) throw reject("Ground movement is disabled");
   let status: string;
-  // the controller takes over an automatic departure (STOP / CONT leave it running)
-  if (body.action !== "stop" && body.action !== "cont") ac.gnd.auto = null;
   switch (body.action) {
     case "push":
       status = pushback(ac, ctx, { facing: body.facing, to: body.to });

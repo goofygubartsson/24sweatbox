@@ -10,6 +10,7 @@ import {
   dist,
   findRunwayEnd,
   fixes,
+  msaAreas,
   getAirport,
   getGroundGraph,
   groundArt,
@@ -78,6 +79,8 @@ export interface Scene {
   apt: string | null;
   mode: ViewMode;
   fixesAlways: boolean;
+  /** Minimum safe altitude areas (.MSA). */
+  msa?: boolean;
   selectedId: string | null;
   notes: Record<string, TagNote>;
   assumed: ReadonlySet<string>;
@@ -426,6 +429,37 @@ function drawFixes(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number) {
   ctx.restore();
 }
 
+/** Minimum safe altitude areas: thin outlines with their altitude ("1400'"). */
+function drawMsa(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number) {
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.strokeStyle = SC.msa;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = SC.msaLabel;
+  ctx.font = `${cfg.ui.msaLabelPx}px ${MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const area of msaAreas) {
+    ctx.beginPath();
+    area.points.forEach(([x, y], i) => {
+      const [sx, sy] = cam.toScreen(x, y);
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    if (cam.zoom < cfg.ui.msaLabelMinZoom) continue;
+    const labels = area.labels.length
+      ? area.labels
+      : [[area.points.reduce((s, p) => s + p[0], 0) / area.points.length, area.points.reduce((s, p) => s + p[1], 0) / area.points.length] as [number, number]];
+    for (const [x, y] of labels) {
+      const [sx, sy] = cam.toScreen(x, y);
+      ctx.fillText(`${area.alt}'`, sx, sy);
+    }
+  }
+  ctx.restore();
+}
+
 function drawAirportLabels(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number) {
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -441,7 +475,7 @@ function drawAirportLabels(ctx: CanvasRenderingContext2D, cam: Camera, dpr: numb
 }
 
 function renderMap(cam: Camera, scene: Scene, dpr: number): HTMLCanvasElement {
-  const key = [cam.key(), dpr, scene.mode, scene.apt, scene.fixesAlways, scene.centrelines.join(",")].join("|");
+  const key = [cam.key(), dpr, scene.mode, scene.apt, scene.fixesAlways, scene.msa, scene.centrelines.join(",")].join("|");
   if (mapCanvas && key === mapKey) return mapCanvas;
   mapCanvas ??= document.createElement("canvas");
   mapCanvas.width = Math.round(cam.w * dpr);
@@ -480,6 +514,7 @@ function renderMap(cam: Camera, scene: Scene, dpr: number): HTMLCanvasElement {
     }
     if (scene.fixesAlways) drawFixes(ctx, cam, dpr);
   }
+  if (scene.msa) drawMsa(ctx, cam, dpr);
   mapKey = key;
   return mapCanvas;
 }

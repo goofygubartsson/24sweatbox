@@ -1,7 +1,7 @@
 // Replay player: open / drop a replay file, or receive one from a just-ended session tab.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cfg from "@sweatbox/config/public";
-import { formatClock, getGroundGraph, airports, dist, airportRef, ReplayFileSchema, type ReplayFile } from "@sweatbox/shared";
+import { SESSION_CODE_RE, formatClock, getGroundGraph, airports, dist, airportRef, ReplayFileSchema, type ReplayFile } from "@sweatbox/shared";
 import { Header } from "../components/Header";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toast";
@@ -11,6 +11,8 @@ import { fromReplay, type RAircraft } from "../scope/model";
 import { useScope } from "../scope/store";
 import { switchView, stationLabel } from "../scope/views";
 import { REPLAY_DATA, REPLAY_READY } from "../scope/EndScreen";
+import { api, ApiError } from "../lib/api";
+import { useSearch } from "../lib/router";
 
 const SPEEDS = [1, 2, 4, 8, 16];
 const TRAIL_EVERY = 3; // frames between history dots
@@ -25,6 +27,26 @@ export function ReplayPage() {
   const [replay, setReplay] = useState<ReplayFile | null>(null);
   const [over, setOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const code = useSearch().get("code");
+  const [needLogin, setNeedLogin] = useState(false);
+
+  // /replay?code=AbCdEf: an archived replay (ATC24Academy results link here)
+  useEffect(() => {
+    if (!code || !SESSION_CODE_RE.test(code)) return;
+    api.replay(code).then(
+      (raw) => {
+        try {
+          setReplay(parseReplay(raw));
+        } catch (e) {
+          toast((e as Error).message, "error");
+        }
+      },
+      (e: unknown) => {
+        if (e instanceof ApiError && e.status === 401) setNeedLogin(true);
+        else toast(e instanceof ApiError && e.status === 404 ? "That replay isn't available (it may have expired)" : (e as Error).message, "error", 6000);
+      },
+    );
+  }, [code]);
 
   const openText = useCallback((text: string) => {
     try {
@@ -61,6 +83,14 @@ export function ReplayPage() {
         <Header />
         <main className="page__main">
           <h1 className="page-title">Replay</h1>
+          {needLogin && (
+            <p>
+              <a className="btn btn--primary" href={api.loginUrl(location.pathname + location.search)}>
+                Log in with Discord
+              </a>{" "}
+              to open replay {code}.
+            </p>
+          )}
           <div
             className={`dropzone${over ? " dropzone--over" : ""}`}
             onDragOver={(e) => {
@@ -194,6 +224,7 @@ function Player({ replay, onOpen }: { replay: ReplayFile; onOpen: () => void }) 
       apt: s.apt,
       mode: s.mode,
       fixesAlways: s.fixesAlways,
+      msa: s.msa,
       selectedId: s.selectedId,
       notes: {},
       assumed: new Set(),

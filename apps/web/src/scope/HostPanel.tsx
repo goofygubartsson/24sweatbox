@@ -1,5 +1,7 @@
 // Session panel (trainers): clock, load a generated sweatbox, TWR mode, who is connected, end.
 import { useState } from "react";
+import type { AcademyView } from "@sweatbox/shared";
+import { ResultModal } from "../components/Academy";
 import cfg from "@sweatbox/config/public";
 import { formatClock, formatDuration, type GenerateSpec } from "@sweatbox/shared";
 import { api } from "../lib/api";
@@ -8,8 +10,10 @@ import { GenerateForm } from "../components/GenerateForm";
 import { useScope } from "./store";
 import { act } from "./hostbar/act";
 
-export function HostPanel({ code }: { code: string }) {
+/** `academy`: the ATC24Academy assessment this session runs; it ends by recording the result. */
+export function HostPanel({ code, academy, onAcademy }: { code: string; academy?: AcademyView | null; onAcademy?: (v: AcademyView) => void }) {
   const snap = useScope((s) => s.snap);
+  const [grading, setGrading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,11 +86,37 @@ export function HostPanel({ code }: { code: string }) {
         </section>
       )}
 
-      <section>
-        <Button variant="danger" confirm="Click again to end the session" disabled={snap.ended} onClick={() => void act(() => api.end(code))}>
-          End session
-        </Button>
-      </section>
+      {snap.academyId ? (
+        <section>
+          <h3>ATC24Academy assessment</h3>
+          {academy && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              {academy.student} · {academy.course}: {academy.module}
+              {academy.outcome && ` · ${academy.outcome}`}
+            </span>
+          )}
+          {academy?.instructions && <p className="academy-note">{academy.instructions}</p>}
+          <Button variant="danger" disabled={!academy || academy.status !== "reserved"} onClick={() => setGrading(true)}>
+            Record result and end
+          </Button>
+          {grading && academy && (
+            <ResultModal
+              view={academy}
+              onClose={() => setGrading(false)}
+              onDone={(v) => {
+                setGrading(false);
+                onAcademy?.(v);
+              }}
+            />
+          )}
+        </section>
+      ) : (
+        <section>
+          <Button variant="danger" confirm="Click again to end the session" disabled={snap.ended} onClick={() => void act(() => api.end(code))}>
+            End session
+          </Button>
+        </section>
+      )}
     </aside>
   );
 }

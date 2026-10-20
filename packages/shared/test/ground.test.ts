@@ -150,7 +150,14 @@ describe("real ground maps", () => {
       if (!isRoutable(data)) continue;
       const graph = buildGroundGraph(data, icao);
       expect(graph.nodes.length).toBeGreaterThan(0);
-      for (const s of graph.stands) expect(pushFacingOptions(graph, s).length, `${icao} stand ${s.name}`).toBeGreaterThan(0);
+      for (const s of graph.stands) {
+        const opts = pushFacingOptions(graph, s);
+        expect(opts.length, `${icao} stand ${s.name}`).toBeGreaterThan(0);
+        // a controller can pick each one by its heading
+        expect(new Set(opts.map((o) => o.hdg)).size, `${icao} stand ${s.name} push headings`).toBe(opts.length);
+      }
+      // no taxiway of zero length (two nodes on one spot)
+      for (const e of graph.edges) expect(e.len, `${icao} edge ${e.id} (${e.name})`).toBeGreaterThan(1e-4);
     }
   });
 });

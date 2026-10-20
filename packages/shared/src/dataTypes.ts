@@ -74,6 +74,17 @@ export type Outlines = z.infer<typeof OutlinesSchema>;
 export const SectorsSchema = z.record(z.object({ name: z.string(), polygon: Poly }));
 export type Sectors = z.infer<typeof SectorsSchema>;
 
+/** Minimum safe altitude areas (the .MSA overlay): an altitude, its area and where its label goes. */
+export const MsaAreaSchema = z.object({
+  airport: z.string().regex(/^I[A-Z0-9]{3}$/),
+  alt: z.number().int().min(0).max(30000),
+  points: z.array(Pt).min(3),
+  /** Label positions (one or more); the area's centre when empty. */
+  labels: z.array(Pt).default([]),
+});
+export const MsaSchema = z.object({ areas: z.array(MsaAreaSchema) });
+export type MsaArea = z.infer<typeof MsaAreaSchema>;
+
 export const GroundEdgeSchema = z.object({
   a: z.number().int().nonnegative(),
   b: z.number().int().nonnegative(),

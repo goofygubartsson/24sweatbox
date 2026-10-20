@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { Link, navigate, useSearch } from "../lib/router";
 import { Button } from "../components/Button";
 import { GenerateForm } from "../components/GenerateForm";
+import { AcademySessions } from "../components/Academy";
 
 const LOGIN_ERRORS: Record<string, string> = {
   not_in_guild: "Join the ATC24Academy Discord first, then log in again.",
@@ -142,6 +143,7 @@ export function Home() {
             </form>
           </section>
         </div>
+        {me.isHost && <AcademySessions />}
       </div>
       <nav className="home__nav" aria-label="More">
         {cfg.features.replay && <Link to="/replay">Replay</Link>}

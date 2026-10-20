@@ -69,7 +69,7 @@ function oldCommand(kw: string, args: string[], rest: string): CommandInput | nu
     }
     case "AUTO":
       need(args, kw, 2, 3);
-      return { kind: "AUTO", offset: o, cs: callsign(args[0]), runway: runwayName(args[1]), ...((args[2] ?? "").toUpperCase() === "CLR" ? { clr: true } : {}) };
+      return null; // automatic departures are gone: dropped (with a note)
     case "APPR":
       need(args, kw, 2);
       return { kind: "APPR", offset: o, cs: callsign(args[0]), runway: runwayName(args[1]) };
@@ -121,6 +121,7 @@ export interface Converted {
 /** Convert an old-layout file. Throws an Error listing the lines it could not read. */
 export function convertLegacyScript(text: string, name?: string): Converted {
   const commands: CommandInput[] = [];
+  const dropped: string[] = [];
   const errors: string[] = [];
   const comments: string[] = [];
   text
@@ -139,6 +140,7 @@ export function convertLegacyScript(text: string, name?: string): Converted {
         const rest = m![3] ?? "";
         const c = oldCommand(m![2]!.toUpperCase(), rest.trim() === "" ? [] : rest.trim().split(/\s+/), rest);
         if (c) commands.push({ ...c, offset: Math.round(Number(m![1])) });
+        else if (m![2]!.toUpperCase() === "AUTO") dropped.push(`dropped "${raw}" (automatic departures are no longer part of the sim)`);
       } catch (e) {
         if (!(e instanceof LineError)) throw e;
         errors.push(`Line ${i + 1}: ${e.message}`);
@@ -148,7 +150,7 @@ export function convertLegacyScript(text: string, name?: string): Converted {
   commands.sort((a, b) => a.offset - b.offset);
 
   // the header: scope view and runways from the CMD lines at the start, after landing from ROLLOUT
-  const notes: string[] = [];
+  const notes: string[] = [...dropped];
   let airport: string | null = null;
   let view: ScopeView = "CTR";
   let dep: string | null = null;
@@ -180,7 +182,7 @@ export function convertLegacyScript(text: string, name?: string): Converted {
   if (!airport) {
     for (const c of events) {
       airport =
-        c.kind === "GATE" ? c.apt : c.kind === "DEP" || c.kind === "APPR" || c.kind === "AUTO" || c.kind === "CCT" ? c.runway.split("-")[0]! : c.kind === "SPAWN" ? c.arr : null;
+        c.kind === "GATE" ? c.apt : c.kind === "DEP" || c.kind === "APPR" || c.kind === "CCT" ? c.runway.split("-")[0]! : c.kind === "SPAWN" ? c.arr : null;
       if (airport) break;
     }
   }

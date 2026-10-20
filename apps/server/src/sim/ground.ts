@@ -5,7 +5,6 @@ import { config } from "@sweatbox/config";
 import {
   add,
   angleDiff,
-  appr,
   aviationAngle,
   bearing,
   crossingStops,
@@ -44,8 +43,7 @@ import {
   type GStand,
   type Vec,
 } from "@sweatbox/shared";
-import type { Aircraft, AutoState, GroundState, PathPoint, TaxiRequest, TaxiTarget } from "./types";
-import { releaseConflict } from "./separation";
+import type { Aircraft, GroundState, PathPoint, TaxiRequest, TaxiTarget } from "./types";
 import type { SimContext } from "./context";
 import { makeCircuit } from "./circuit";
 import { reject } from "../errors";
@@ -86,7 +84,6 @@ export function newGroundState(apt: string, partial: Partial<GroundState> = {}):
     arrival: false,
     rolloutExitAt: null,
     crossStops: [],
-    auto: null,
     ...partial,
   };
 }
@@ -272,21 +269,6 @@ function spacingGap(ac: Aircraft, ctx: SimContext): number | null {
     }
   }
   return best;
-}
-
-/** No traffic on our path for the next `d` units (room to cross a runway and clear it). */
-function roomAhead(ac: Aircraft, ctx: SimContext, d: number): boolean {
-  const pts = pathAhead(ac, d);
-  return !ctx.aircraft.some(
-    (o) =>
-      o !== ac &&
-      !o.gone &&
-      o.onGround &&
-      o.gnd?.apt === ac.gnd!.apt &&
-      o.gnd.mode !== "stand" &&
-      projectOnPolyline(o.pos, pts).lateral <= G.spacingLateralUnits &&
-      projectOnPolyline(o.pos, pts).along > 0.002,
-  );
 }
 
 function remainingLength(ac: Aircraft): number {
@@ -538,7 +520,6 @@ function liftOff(ac: Aircraft, ctx: SimContext): void {
   ac.onGround = false;
   ac.altitude = S.depInitialAltFt;
   ac.assigned = { alt: gnd.climb, heading: Math.round(geo.heading) || 360, speed: S.defaultDepSpeedKt };
-  ctx.lastTakeoff[pairKey(gnd.apt, geo.pair)] = ctx.simTotal;
   ac.gnd = null;
   ctx.log(`DEPARTED ${ac.callsign} ${rwy}`);
   ac.arr = ac.fp.arriving;
@@ -554,7 +535,6 @@ function liftOff(ac: Aircraft, ctx: SimContext): void {
     return;
   }
   ac.dep = { rwy, route: ac.fp.route, joined: false, overridden: false };
-  ac.autoFlight = ctx.simTotal; // keeps its own separation until a controller instructs it
 }
 
 /**
@@ -574,9 +554,7 @@ function departureAhead(ac: Aircraft, ctx: SimContext): Aircraft | null {
 }
 
 export function stepGround(ac: Aircraft, ctx: SimContext): void {
-  if (ac.gnd!.auto) stepAuto(ac, ctx);
-  const gnd = ac.gnd;
-  if (!gnd) return;
+  const gnd = ac.gnd!;
   switch (gnd.mode) {
     case "stand":
       ac.groundSpeed = 0;
@@ -590,10 +568,8 @@ export function stepGround(ac: Aircraft, ctx: SimContext): void {
       ac.groundSpeed = Math.max(0, ac.groundSpeed - G.decelHoldKtPerSec);
       return;
     case "takeoff": {
-      // one takeoff at a time: wait until the departure before has reached takeoffReleaseFt, and
-      // (except circuits) until the climb-out keeps its separation from everyone
-      const circuit = ac.cctAfterTakeoff !== null || ac.fp.route.toUpperCase() === "CCT";
-      const ahead = ac.groundSpeed < 1 ? (departureAhead(ac, ctx) ?? (circuit || !gnd.rwy ? null : releaseConflict(ac, ctx, gnd.rwy))) : null;
+      // one takeoff at a time: wait until the departure before has reached takeoffReleaseFt
+      const ahead = ac.groundSpeed < 1 ? departureAhead(ac, ctx) : null;
       const des = gnd.rwy?.split("-")[1] ?? "";
       if (ahead) {
         ac.groundSpeed = 0;
@@ -958,365 +934,7 @@ function updateFollowPath(ac: Aircraft, ctx: SimContext, force = false): void {
   if (gnd.path.length) gnd.noUturnEdge = null;
 }
 
-// ---- AUTO, rollout, stands -------------------------------------------------------------------------------
-
-// ---- automatic departures ----------------------------------------------------------------------------
-
-/**
- * Script AUTO: the aircraft pushes back and taxis to the nearest holding point for the runway as
- * soon as it can do so safely. With `clr` (autodep when=cleared, DEL sweatboxes) it waits for the
- * strip clearance first, then also crosses runways, lines up and takes off by itself; with `full`
- * (autodep takeoff=auto) it does all that straight away.
- */
-export function autoTaxi(ac: Aircraft, ctx: SimContext, runway: string, clr = false, full = false): void {
-  const gnd = ac.gnd;
-  if (!gnd || gnd.mode !== "stand" || !gnd.stand) {
-    ctx.log(`AUTO ${ac.callsign}: not parked on a stand`, "warn");
-    return;
-  }
-  const end = findRunwayEnd(runway);
-  if (!end || end.icao !== gnd.apt) {
-    ctx.log(`AUTO ${ac.callsign}: unknown runway ${runway}`, "warn");
-    return;
-  }
-  gnd.auto = { rwy: end.name, primary: end.name, full: clr || full, phase: clr ? "clearance" : "push", hold: null, nextCheck: 0 };
-  gnd.rwy = end.name;
-  gnd.status = clr ? `ON STAND ${gnd.stand}, AWAITING CLEARANCE` : `ON STAND ${gnd.stand}, READY`;
-  if (!clr) stepAuto(ac, ctx);
-}
-
-const pairKey = (apt: string, pair: string) => `${apt} ${pair.split("/").sort().join("/")}`;
-
-/** Clearance needed between two aircraft (half of each length plus a wingtip margin). */
-const clearanceBetween = (a: Aircraft, b: Aircraft) => (lengthUnits(a.type) + lengthUnits(b.type)) / 2 + G.autoClearanceUnits;
-
-/** Where another aircraft is and is about to be on the ground (its path ahead). */
-function aheadOf(o: Aircraft, maxDist: number): Vec[] {
-  const pts: Vec[] = [o.pos];
-  let acc = 0;
-  for (const pp of o.gnd?.path ?? []) {
-    acc += dist(pts[pts.length - 1]!, pp.p);
-    pts.push(pp.p);
-    if (acc > maxDist) break;
-  }
-  return pts;
-}
-
-const movingOnGround = (ac: Aircraft, o: Aircraft) =>
-  o !== ac && !o.gone && o.onGround && o.gnd !== null && o.gnd.apt === ac.gnd!.apt && o.gnd.mode !== "stand";
-
-/** Another aircraft in the way of a pushback along `pts`, or null. Parked aircraft don't count. */
-function pushConflict(ac: Aircraft, ctx: SimContext, pts: Vec[]): Aircraft | null {
-  for (const o of ctx.aircraft) {
-    if (!movingOnGround(ac, o)) continue;
-    const need = clearanceBetween(ac, o);
-    if (aheadOf(o, 0.25).some((q) => projectOnPolyline(q, pts).lateral < need)) return o;
-  }
-  return null;
-}
-
-/** Heading of a polyline at the point nearest p. */
-function directionAt(pts: Vec[], p: Vec): number {
-  const i = Math.max(1, projectOnPolyline(p, pts).index);
-  return bearing(pts[i - 1]!, pts[i]!);
-}
-
-/**
- * Traffic on a planned route that makes it unusable: coming the other way, or stopped across it.
- * Traffic stopped facing the same way is fine (we queue behind it).
- */
-function routeConflict(ac: Aircraft, ctx: SimContext, pts: Vec[]): Aircraft | null {
-  if (pts.length < 2) return null;
-  for (const o of ctx.aircraft) {
-    if (!movingOnGround(ac, o)) continue;
-    if (["lineup", "lined", "takeoff"].includes(o.gnd!.mode)) continue; // on the runway, gone soon
-    if (projectOnPolyline(o.pos, pts).lateral > 0.025) continue;
-    const off = Math.abs(angleDiff(o.heading, directionAt(pts, o.pos)));
-    const moving = o.groundSpeed > 0.5 || o.gnd!.path.length > 0;
-    if (off > 100 || (!moving && off > 45)) return o;
-  }
-  return null;
-}
-
-/** Edges blocked by aircraft that sit still on the taxiways. */
-function blockedEdges(ac: Aircraft, ctx: SimContext, g: GroundGraph): Set<number> {
-  const out = new Set<number>();
-  for (const o of ctx.aircraft) {
-    if (!movingOnGround(ac, o) || o.gnd!.mode !== "holding" || o.gnd!.path.length) continue;
-    for (const e of g.edges) if (!e.stand && projectOnPolyline(o.pos, e.pts).lateral < 0.02) out.add(e.id);
-  }
-  return out;
-}
-
-/** Who is using a runway (on it, lined up, landing or about to), or null when it is free. */
-function runwayBusy(ac: Aircraft, ctx: SimContext, apt: string, pair: string, arrivalNm: number, ignoreRolling = false): Aircraft | null {
-  const ends = pair
-    .split("/")
-    .map((d) => findRunwayEnd(`${apt}-${d}`))
-    .filter((e): e is NonNullable<typeof e> => Boolean(e));
-  if (!ends.length) return null;
-  const geo = rwyEnd(ends[0]!);
-  const half = (getGroundGraph(apt)?.data.rwyHalfWidth ?? 0.03) + 0.01;
-  const onPair = (rwy: string | null | undefined) => {
-    const e = rwy ? findRunwayEnd(rwy) : undefined;
-    return Boolean(e && e.icao === apt && samePair(e.pair.pair, pair));
-  };
-  for (const o of ctx.aircraft) {
-    if (o === ac || o.gone) continue;
-    if (o.onGround && o.gnd && o.gnd.apt === apt) {
-      if (ignoreRolling && o.gnd.mode === "takeoff" && onPair(o.gnd.rwy)) continue;
-      // an aircraft held up behind the one asking (lining up, or crossing behind it) waits for us:
-      // it doesn't block us
-      const waitingForUs =
-        o.gnd.spacing &&
-        (projectOnPolyline(ac.pos, pathAhead(o, G.spacingLookaheadUnits)).lateral <= G.spacingLateralUnits || dist(o.pos, ac.pos) <= G.spacingLookaheadUnits / 2);
-      if (waitingForUs) continue;
-      if (["lineup", "lined", "takeoff", "rollout"].includes(o.gnd.mode) && onPair(o.gnd.rwy)) return o;
-      const onIt = (p: Vec) => {
-        const along = dot(sub(p, geo.start), geo.dir);
-        return along > -0.02 && along < geo.length + 0.02 && Math.abs(dot(sub(p, geo.start), perp(geo.dir))) < half;
-      };
-      if (onIt(o.pos)) return o;
-      // cleared across it and about to enter
-      if (!o.gnd.paused && (o.gnd.mode === "taxi" || o.gnd.mode === "follow") && o.groundSpeed > 0) {
-        const ahead = pathAhead(o, G.crossClearUnits);
-        for (let i = 1; i < ahead.length; i++)
-          for (let f = 0; f <= 1; f += 0.1) if (onIt(add(ahead[i - 1]!, scale(sub(ahead[i]!, ahead[i - 1]!), f)))) return o;
-      }
-    } else if (!o.onGround) {
-      if (o.landing && onPair(o.landing.rwy)) return o;
-      const landingOn = o.approach ?? (o.cct && (o.cct.leg === "base" || o.cct.leg === "final") ? o.cct.rwy : null);
-      if (!landingOn || !onPair(landingOn)) continue;
-      const a = appr(findRunwayEnd(landingOn)!);
-      const nm = dot(sub(o.pos, a.threshold), a.out) / S.unitsPerNm;
-      if (nm > -0.5 && nm < arrivalNm) return o;
-    }
-  }
-  return null;
-}
-
-interface AutoPlan {
-  hdg: number;
-  hold: string;
-  path: GPath;
-  push: PushPlan;
-  cost: number;
-}
-
-/**
- * Holding points to depart from: they have a runway entry beside them, preferably in the first part
- * of the runway from its departure end (no intersection departures with half the runway behind
- * you). `nearEndOnly` false gives the rest too, nearest the departure end first.
- */
-function departureHolds(g: GroundGraph, rwy: string, nearEndOnly = true) {
-  const geo = rwyEnd(findRunwayEnd(rwy)!);
-  const along = (h: (typeof g.holds)[number]) => dot(sub(g.nodes[entryNearHold(g, h)!.n]!, geo.start), geo.dir);
-  return holdsForRunway(g, geo.pair)
-    .filter((h) => entryNearHold(g, h) !== null && (!nearEndOnly || along(h) <= geo.length * G.autoDepHoldMaxFraction))
-    .sort((a, b) => along(a) - along(b));
-}
-
-/**
- * Best push facing, holding point and taxi path for an automatic departure, around blocked taxiways.
- * Holds on the far side of the departure runway itself (reached by crossing it) only as a last
- * resort; other runway crossings count extra.
- */
-function autoPlan(ac: Aircraft, ctx: SimContext, g: GroundGraph, stand: GStand, a: AutoState, nearEndOnly = true, crossOwn = false): AutoPlan | null {
-  const holds = departureHolds(g, a.rwy, nearEndOnly);
-  const ownPair = rwyEnd(findRunwayEnd(a.rwy)!).pair;
-  const avoid = blockedEdges(ac, ctx, g);
-  // aircraft already heading for each hold: spread the queue over the holds
-  const queued = (name: string) => ctx.aircraft.filter((o) => o !== ac && !o.gone && o.gnd?.auto?.hold === name).length;
-  let best: AutoPlan | null = null;
-  for (const opt of ac.gnd!.pushFacing) {
-    let push: PushPlan;
-    try {
-      push = pushPlan(ac, g, stand, { facing: opt.hdg }, [opt]);
-    } catch {
-      continue;
-    }
-    for (const h of holds) {
-      const p = shortestPath(g, stand.j, h.n, { forbidFirstEdge: opt.edge, avoidEdges: avoid });
-      if (!p) continue;
-      const crossings = p.edges.map((id) => g.edges[id]!.crossing).filter((r): r is string => Boolean(r));
-      if (!crossOwn && crossings.some((r) => samePair(r, ownPair))) continue;
-      const cost = p.length + queued(h.name) * G.autoQueuePenaltyUnits + crossings.length * G.autoCrossPenaltyUnits;
-      if (!best || cost < best.cost) best = { hdg: opt.hdg, hold: h.name, path: p, push, cost };
-    }
-  }
-  if (best) return best;
-  // no way to the holds near the start of the runway: any departure hold will do; then the far side
-  if (nearEndOnly) return autoPlan(ac, ctx, g, stand, a, false, crossOwn);
-  return crossOwn ? null : autoPlan(ac, ctx, g, stand, a, true, true);
-}
-
-/** Departures queued for a runway end: on their way to it, holding for it or lining up. */
-function runwayQueue(ac: Aircraft, ctx: SimContext, rwy: string): number {
-  return ctx.aircraft.filter(
-    (o) => o !== ac && !o.gone && o.onGround && o.gnd && !o.gnd.arrival && o.gnd.rwy === rwy && ["push", "taxi", "follow", "holding", "lineup", "lined"].includes(o.gnd.mode),
-  ).length;
-}
-
-/** Arrivals coming in to (or landing on) this runway end. */
-function arrivalsFor(ctx: SimContext, rwy: string): boolean {
-  return ctx.aircraft.some((o) => !o.gone && (o.approach === rwy || o.autoLand?.rwy === rwy || o.landing?.rwy === rwy || (o.onGround && o.gnd?.mode === "rollout" && o.gnd.rwy === rwy)));
-}
-
-/**
- * The runway for an automatic departure: the one it was given, or, when that already has
- * autoRunwayQueueMax departures queued, the next runway of the [sweatbox] settings (departure
- * runway, then the arrival runways in order) with room. An arrival runway takes departures only
- * while no arrival is coming in to it, and only autoArrivalRunwayQueueMax of them (they would sit
- * on the arrivals' way off the runway). Circuit flights keep theirs. Null: all full.
- */
-function runwayWithRoom(ac: Aircraft, ctx: SimContext, a: AutoState): string | null {
-  const end = findRunwayEnd(a.primary)!;
-  const cfg = ctx.runwayConfig;
-  const circuit = ac.cctAfterTakeoff !== null || ac.fp.route.toUpperCase() === "CCT";
-  const order = !circuit && cfg && cfg.apt === end.icao && cfg.dep === end.designator ? [cfg.dep, ...cfg.arr.filter((d) => d !== cfg.dep)] : [end.designator];
-  if (order.length === 1) return a.primary;
-  for (const [i, d] of order.entries()) {
-    const name = `${end.icao}-${d}`;
-    if (!findRunwayEnd(name)) continue;
-    if (i > 0 && arrivalsFor(ctx, name)) continue;
-    const max = i > 0 && cfg!.arr.includes(d) && ctx.aircraft.some((o) => o.autoLand?.rwy === name || o.approach === name || o.fp.arriving === end.icao) ? G.autoArrivalRunwayQueueMax : G.autoRunwayQueueMax;
-    if (runwayQueue(ac, ctx, name) < max) return name;
-  }
-  return null;
-}
-
-/** One second of an automatic departure: may it push, cross, line up, take off yet? */
-function stepAuto(ac: Aircraft, ctx: SimContext): void {
-  const gnd = ac.gnd!;
-  const a = gnd.auto!;
-  const g = getGroundGraph(gnd.apt)!;
-  const end = findRunwayEnd(a.rwy)!;
-  const geo = rwyEnd(end);
-  switch (a.phase) {
-    case "clearance":
-      if (!ctx.strips[ac.callsign]?.c) return;
-      a.phase = "push";
-      a.nextCheck = ctx.simTotal + G.autoPushAfterClearSec; // a moment after the clearance
-      gnd.status = "CLEARED, READY TO PUSH";
-      return;
-    case "push": {
-      if (gnd.mode !== "stand" || !gnd.stand) {
-        a.phase = "taxi";
-        return;
-      }
-      if (ctx.simTotal < a.nextCheck) return;
-      a.nextCheck = ctx.simTotal + G.autoCheckSec;
-      const rwy = runwayWithRoom(ac, ctx, a);
-      if (!rwy) {
-        gnd.status = `ON STAND ${gnd.stand}, EVERY RUNWAY QUEUE FULL`;
-        return;
-      }
-      a.rwy = rwy;
-      const stand = g.standByName.get(gnd.stand)!;
-      const plan = autoPlan(ac, ctx, g, stand, a);
-      if (!plan) {
-        gnd.status = `ON STAND ${gnd.stand}, ROUTE TO ${end.designator} BLOCKED`;
-        return;
-      }
-      const pushTraffic = pushConflict(ac, ctx, [ac.pos, ...plan.push.points.map((pp) => pp.p)]);
-      if (pushTraffic) {
-        gnd.status = `ON STAND ${gnd.stand}, WAITING TO PUSH (${pushTraffic.callsign})`;
-        return;
-      }
-      const routeTraffic = routeConflict(ac, ctx, toPathPoints(g, plan.path).map((pp) => pp.p));
-      if (routeTraffic) {
-        gnd.status = `ON STAND ${gnd.stand}, WAITING FOR ${routeTraffic.callsign}`;
-        return;
-      }
-      pushback(ac, ctx, { facing: plan.hdg });
-      a.hold = plan.hold;
-      a.phase = "taxi";
-      gnd.rwy = a.rwy;
-      gnd.queued = { route: [], nodes: [], target: `H:${plan.hold}` };
-      gnd.status = `${gnd.status}, THEN TAXI → HOLD ${plan.hold}`;
-      return;
-    }
-    case "taxi": {
-      // stopped short of a runway on the way: fully automatic departures cross when it is free
-      if (gnd.paused && gnd.status.startsWith("HOLD SHORT ")) {
-        if (!a.full || ctx.simTotal < a.nextCheck) return;
-        a.nextCheck = ctx.simTotal + G.autoCheckSec;
-        const crossing = gnd.status.slice("HOLD SHORT ".length).trim();
-        // only with the runway free and room to get off it on the far side
-        const room = G.crossClearUnits + 2 * lengthUnits(ac.type);
-        if (!runwayBusy(ac, ctx, gnd.apt, crossing, G.autoCrossArrivalNm) && roomAhead(ac, ctx, room)) continueTaxi(ac);
-        return;
-      }
-      if (gnd.mode !== "holding" || gnd.queued || gnd.path.length) return;
-      const hold = a.hold ? g.holds.find((h) => h.name === a.hold) : undefined;
-      if (hold && gnd.node === hold.n) {
-        // at the holding point: the controller takes over, or it carries on by itself
-        if (a.full) {
-          a.phase = "depart";
-          a.nextCheck = 0;
-        } else gnd.auto = null;
-        return;
-      }
-      // the taxi didn't start (or ended short): try again
-      if (ctx.simTotal < a.nextCheck) return;
-      a.nextCheck = ctx.simTotal + G.autoCheckSec;
-      const target = hold ?? departureHolds(g, a.rwy, false)[0];
-      if (!target) return;
-      try {
-        startTaxi(ac, ctx, { route: [], nodes: [], target: `H:${target.name}` });
-        a.hold = target.name;
-      } catch (e) {
-        gnd.status = `HOLDING, NO ROUTE TO ${target.name} (${(e as Error).message})`;
-      }
-      return;
-    }
-    case "depart":
-    case "lined": {
-      if (ctx.simTotal < a.nextCheck) return;
-      if (a.phase === "depart" ? gnd.mode !== "holding" : gnd.mode !== "lined") return;
-      a.nextCheck = ctx.simTotal + G.autoCheckSec;
-      const key = pairKey(gnd.apt, geo.pair);
-      // landing traffic or anyone else on the runway: wait at the hold
-      const busy = runwayBusy(ac, ctx, gnd.apt, geo.pair, G.autoArrivalClearNm, true);
-      if (busy) {
-        if (a.phase === "depart") gnd.status = `HOLDING SHORT ${end.designator}, WAITING FOR THE RUNWAY (${busy.callsign})`;
-        return;
-      }
-      const rolling = runwayBusy(ac, ctx, gnd.apt, geo.pair, 0);
-      const last = ctx.lastTakeoff[key];
-      const tooSoon = last !== undefined && ctx.simTotal - last < G.autoDepIntervalSec;
-      const traffic = ac.cctAfterTakeoff === null ? releaseConflict(ac, ctx, a.rwy) : null;
-      if (traffic && !rolling && !tooSoon) {
-        if (a.phase === "depart") gnd.status = `HOLDING SHORT ${end.designator}, TRAFFIC ${traffic.callsign}`;
-        return;
-      }
-      // a runway arrivals land on: never wait on it, line up only to go straight away
-      const cfg = ctx.runwayConfig;
-      const arrivalRunway = Boolean(cfg && cfg.apt === gnd.apt && cfg.arr.some((d) => samePair(findRunwayEnd(`${gnd.apt}-${d}`)?.pair.pair ?? "", geo.pair)));
-      const waitFor = rolling ?? departureAhead(ac, ctx);
-      try {
-        if (waitFor || tooSoon) {
-          // line up and wait behind the departure ahead
-          if (a.phase === "depart") {
-            if (arrivalRunway) {
-              gnd.status = `HOLDING SHORT ${end.designator}, WAITING FOR ${waitFor?.callsign ?? "THE DEPARTURE AHEAD"}`;
-              return;
-            }
-            takeoff(ac, ctx, { runway: a.rwy, wait: true });
-            a.phase = "lined";
-          }
-          return;
-        }
-        takeoff(ac, ctx, { runway: a.rwy });
-        ctx.lastTakeoff[key] = ctx.simTotal;
-        gnd.auto = null;
-      } catch (e) {
-        gnd.status = `HOLDING SHORT ${end.designator} (${(e as Error).message})`;
-      }
-      return;
-    }
-  }
-}
+// ---- rollout, stands -----------------------------------------------------------------------------------
 
 /**
  * After touchdown with ROLLOUT HOLD/STAND: decelerate down the runway and vacate on the side

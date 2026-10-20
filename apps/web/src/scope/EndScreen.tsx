@@ -32,7 +32,8 @@ export async function openReplayTab(code: string): Promise<void> {
   window.setTimeout(() => window.removeEventListener("message", onMsg), 60_000);
 }
 
-export function EndScreen({ stats, onClose }: { stats: SessionStats; onClose: () => void }) {
+/** `returnUrl`: an ATC24Academy student's way back (the result itself goes to the academy directly). */
+export function EndScreen({ stats, onClose, returnUrl }: { stats: SessionStats; onClose: () => void; returnUrl?: string | null }) {
   const rows: [string, string | number][] = [
     ["Sweatbox", stats.scriptName ?? "-"],
     ["Duration", formatDuration(stats.wallSec)],
@@ -50,10 +51,15 @@ export function EndScreen({ stats, onClose }: { stats: SessionStats; onClose: ()
           <Button variant="ghost" onClick={() => navigate("/")}>
             Home
           </Button>
+          {returnUrl && (
+            <a className="btn btn--primary" href={returnUrl}>
+              Return to ATC24Academy
+            </a>
+          )}
           <a className="btn" href={api.replayUrl(stats.code)} download={`sweatbox-${stats.code}.json`}>
             Download replay
           </a>
-          <Button variant="primary" onClick={() => void openReplayTab(stats.code)}>
+          <Button variant={returnUrl ? "secondary" : "primary"} onClick={() => void openReplayTab(stats.code)}>
             View replay
           </Button>
         </>

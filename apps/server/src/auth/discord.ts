@@ -99,6 +99,37 @@ export class DiscordClient {
     return this.member(`${D.apiBase}/guilds/${D.guildId}/members/${userId}`, `Bot ${this.env.DISCORD_BOT_TOKEN}`);
   }
 
+  /** A direct message from the bot (host invitations). Mentions in `content` never ping anyone. */
+  async sendDm(userId: string, content: string): Promise<{ ok: true } | { ok: false; reason: string; transient: boolean }> {
+    if (!this.env.DISCORD_BOT_TOKEN) return { ok: false, reason: "The sweatbox has no Discord bot token (DISCORD_BOT_TOKEN), so it can't message the host", transient: false };
+    const headers = { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" };
+    const fail = async (res: Response, what: string) => {
+      let code = 0;
+      try {
+        code = ((await res.json()) as { code?: number }).code ?? 0;
+      } catch {
+        // not JSON
+      }
+      if (code === 50007) return { ok: false as const, reason: "The host doesn't accept direct messages from the ATC24Academy server", transient: false };
+      if (res.status === 401) return { ok: false as const, reason: "Discord rejected the sweatbox's bot token", transient: false };
+      return { ok: false as const, reason: `Discord answered HTTP ${res.status} while ${what}`, transient: res.status === 429 || res.status >= 500 };
+    };
+    try {
+      const ch = await discordFetch(`${D.apiBase}/users/@me/channels`, { method: "POST", headers, body: JSON.stringify({ recipient_id: userId }) });
+      if (!ch.ok) return await fail(ch, "opening the direct message");
+      const { id } = (await ch.json()) as { id: string };
+      const msg = await discordFetch(`${D.apiBase}/channels/${id}/messages`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+      });
+      if (!msg.ok) return await fail(msg, "sending the direct message");
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: `Discord didn't respond (${(e as Error).name})`, transient: true };
+    }
+  }
+
   get canUseBot(): boolean {
     return Boolean(this.env.DISCORD_BOT_TOKEN) && config.features.botRoleCheck;
   }

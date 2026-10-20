@@ -60,8 +60,8 @@ describe("maker", () => {
   });
 
   it("refuses positions that need a ground map at airports without one", () => {
-    const d: MakerDraft = { ...emptyDraft(), apt: "IPPH", position: "GND", runway: "29" };
-    expect(() => generateItems(d)).toThrow("IPPH has no ground map yet, so GND sweatboxes aren't available there");
+    const d: MakerDraft = { ...emptyDraft(), apt: "ITKO", position: "GND", runway: "20" };
+    expect(() => generateItems(d)).toThrow("ITKO has no ground map yet, so GND sweatboxes aren't available there");
   });
 
   it("makes GND traffic at IRFD, parked on its stands", () => {

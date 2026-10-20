@@ -10,10 +10,11 @@ import { repoRoot } from "./env";
 import type { Deps } from "./deps";
 import { authRoutes } from "./auth/routes";
 import { sessionRoutes } from "./sessions/routes";
+import { academyRoutes } from "./academy/routes";
 
 const API = config.app.apiBase;
 /** First path segments of API routes, for proxies that strip the /api prefix (Caddy handle_path). */
-const API_ROOTS = new Set(["me", "sessions", "scenarios", "health", "ws"]);
+const API_ROOTS = new Set(["me", "sessions", "scenarios", "health", "ws", "v1", "academy"]);
 
 export function originAllowed(origin: string): boolean {
   return origin === new URL(config.app.publicUrl).origin || config.app.corsOrigins.some((o) => (typeof o === "string" ? o === origin : o.test(origin)));
@@ -64,10 +65,25 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   app.get(`${API}/health`, async () => ({ ok: true, name: config.app.name }));
   authRoutes(app, deps);
   sessionRoutes(app, deps);
+  await academyRoutes(app, deps);
 
   const webDist = path.resolve(repoRoot(), config.app.webDistDir);
   if (deps.env.serveWeb && fs.existsSync(path.join(webDist, "index.html"))) {
-    await app.register(fastifyStatic, { root: webDist, wildcard: false });
+    // no Caddy in front (Docker, `pnpm serve` behind a tunnel): the headers it would add
+    app.addHook("onSend", async (_req, reply) => {
+      reply.header("X-Content-Type-Options", "nosniff");
+      reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+      reply.header("X-Frame-Options", "DENY");
+    });
+    await app.register(fastifyStatic, {
+      root: webDist,
+      wildcard: false,
+      // hashed build assets never change; everything else is checked again on every load
+      cacheControl: false,
+      setHeaders: (res, file) => {
+        res.setHeader("Cache-Control", file.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=31536000, immutable" : "no-cache");
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.method === "GET" && !req.url.startsWith(API)) return reply.sendFile("index.html");
       return reply.code(404).send({ error: "Not found", code: "BAD_INPUT" });

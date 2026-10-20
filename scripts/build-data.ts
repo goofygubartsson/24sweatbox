@@ -21,6 +21,7 @@ import {
   OutlinesSchema,
   RunwayPairSchema,
   SectorsSchema,
+  MsaSchema,
   SidsSchema,
   type Airport,
   type FixData,
@@ -300,12 +301,21 @@ function checkSids(sids: z.infer<typeof SidsSchema>, fixes: FixData[], airports:
   }
 }
 
+// ---- minimum safe altitudes ---------------------------------------------------------------------------
+function buildMsa() {
+  const { areas } = parseJson("msa.json", MsaSchema.passthrough());
+  for (const [i, a] of areas.entries()) if (!airportsSeen.has(a.airport)) warnings.push(`msa.json: area ${i} has unknown airport ${a.airport}`);
+  return areas;
+}
+const airportsSeen = new Set<string>();
+
 // ---- main ------------------------------------------------------------------------------------------
 function main() {
   let result: Record<string, unknown>;
   try {
     const runways = buildRunways();
     const airports = buildAirports(runways);
+    for (const a of airports) airportsSeen.add(a.code);
     const fixes = buildFixes();
     const sids = parseJson("sids.json", SidsSchema);
     checkSids(sids, fixes, airports);
@@ -318,6 +328,7 @@ function main() {
       callsigns: buildCallsigns(),
       outlines: buildOutlines(),
       sectors: parseJson("sectors.json", SectorsSchema),
+      msa: buildMsa(),
       ground: buildGround(runways),
       groundArt: buildGroundArt(),
     };

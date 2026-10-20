@@ -103,7 +103,7 @@ test("a GND sweatbox at IRFD parks aircraft on stands and the trainer pushes one
   await expect(page.locator(".gndstatus")).toContainText("PUSHING");
 });
 
-test("a DEL sweatbox: clearing a departure in the C column sends it on its way", async ({ page }) => {
+test("a DEL sweatbox: a departure cleared in the C column leaves a minute later", async ({ page }) => {
   await devLogin(page, "host");
   await createSweatbox(page, "IRFD", "DEL", "25");
   await expect(page.locator(".bar")).toContainText("DEL-IRFD-25");
@@ -117,11 +117,11 @@ test("a DEL sweatbox: clearing a departure in the C column sends it on its way",
   const cell = deps.getByRole("button", { name: label, exact: true });
   await expect(cell).toHaveText("");
   await cell.click();
-  // just a tick; the departure's progress shows on hover
+  // just a tick; it stays on its stand and leaves the list a minute later
   await expect(cell).toHaveText("✓");
-  await expect(cell).toHaveAttribute("title", /^(CLR|PUSH):/);
+  await expect(cell).toHaveAttribute("title", /^CLR:/);
   await command(page, "SBSPEED 15");
-  await expect(cell).toHaveAttribute("title", /^(PUSH|TAXI|HOLD|LU|DEP|AIR):/, { timeout: 40_000 });
+  await expect(cell).toHaveCount(0, { timeout: 30_000 });
 });
 
 test("trainees can join with a code but get no trainer tools", async ({ browser }) => {

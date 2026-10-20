@@ -58,13 +58,13 @@ describe("generated sweatboxes", () => {
   it("uses the airport, position and runway format it was given", () => {
     const g = generateSweatbox({ apt: "IRFD", position: "TWR", runway: "25" });
     expect(g.text).toContain(
-      "[sweatbox]\nname = TWR-IRFD-25\nairport = IRFD\nview = TWR\ndeparture runway = 25L\narrival runways = 25C, 25R\nafter landing = stand\n",
+      "[sweatbox]\nname = TWR-IRFD-25\nairport = IRFD\nposition = TWR\nview = TWR\ndeparture runway = 25L\narrival runways = 25C, 25R\nafter landing = stand\n",
     );
     expect(g.text).not.toMatch(/^\d+ [A-Z]+ /m); // none of the old "0 SPAWN …" lines
     expect(g.text).toMatch(/^\[\d\d:\d\d\] approach: callsign=\S+ runway=25[CR]$/m);
     expect(g.text).not.toMatch(/=07/);
     const app = generateSweatbox({ apt: "IPPH", position: "APP", runway: "29" });
-    expect(app.text).toContain("airport = IPPH\nview = CTR\n");
+    expect(app.text).toContain("airport = IPPH\nposition = APP\nview = CTR\n");
     expect(app.text).toMatch(/\] departing: callsign=\S+ type=\S+ runway=29 /);
   });
 
@@ -77,14 +77,15 @@ describe("generated sweatboxes", () => {
   it("explains bad settings", () => {
     expect(() => generateSweatbox({ apt: "IXXX", position: "TWR", runway: "25" })).toThrow("Unknown airport IXXX");
     expect(() => generateSweatbox({ apt: "IRFD", position: "TWR", runway: "18" })).toThrow("IRFD has no runway 18");
-    expect(() => generateSweatbox({ apt: "IPPH", position: "GND", runway: "29" })).toThrow("IPPH has no ground map yet, so GND sweatboxes aren't available there");
+    expect(() => generateSweatbox({ apt: "ITKO", position: "GND", runway: "20" })).toThrow("ITKO has no ground map yet, so GND sweatboxes aren't available there");
+    // Perth has its ground map now
+    expect(generateSweatbox({ apt: "IPPH", position: "GND", runway: "29" }).text).toMatch(/\] parked: callsign=\S+ type=\S+ stand=\d+ /);
   });
 
-  it("GND and DEL park aircraft on free stands and wait for instructions; TWR taxis them out", () => {
+  it("DEL, GND and TWR park aircraft on the stands, which wait for instructions", () => {
     const gnd = planSweatbox({ apt: "ITST", position: "GND", runway: "27", durationMin: 10 });
     expect(gnd.rollout).toBe("HOLD");
     const parked = gnd.items.filter((i) => i.kind === "dep-stand");
-    expect(parked.every((i) => i.autoDelay === null && !i.autoClr)).toBe(true);
     // every stand starts occupied (ITST has 2); later departures take the next stand that frees up
     expect(parked.filter((i) => i.time === 0 && i.stand !== "*").map((i) => i.stand).sort()).toEqual(["1", "2"]);
     expect(parked.filter((i) => i.stand === "*").length).toBeGreaterThan(10);
@@ -93,14 +94,15 @@ describe("generated sweatboxes", () => {
     expect(gndScript).toMatch(/\] parked: callsign=\S+ type=\S+ stand=any /);
     expect(parseScript(gndScript).errors).toEqual([]);
 
-    // DEL: they wait for the clearance, then go by themselves
+    // DEL: the file says so (a cleared departure leaves a minute later)
     const del = sweatboxScript(planSweatbox({ apt: "ITST", position: "DEL", runway: "27", durationMin: 10 })).text;
-    expect(del).toMatch(/^\[00:00\] autodep: callsign=\S+ runway=27 when=cleared$/m);
+    expect(del).toContain("position = DEL\n");
+    expect(parseScript(del).header?.position).toBe("DEL");
     expect(parseScript(del).errors).toEqual([]);
 
     const twr = planSweatbox({ apt: "ITST", position: "TWR", runway: "27", durationMin: 10 });
     expect(twr.rollout).toBe("STAND");
-    expect(sweatboxScript(twr).text).toMatch(/\] autodep: callsign=\S+ runway=27$/m);
+    expect(sweatboxScript(twr).text).not.toContain("autodep");
   });
 
   it("makeItem gives a new aircraft or null when it can't fit", () => {
@@ -108,12 +110,12 @@ describe("generated sweatboxes", () => {
     const it = makeItem({ apt: "IRFD", position: "APP" as Position, format, items: [] }, "inbound", 120);
     expect(it?.kind).toBe("inbound");
     expect(Math.abs(it!.x)).toBeLessThanOrEqual(58);
-    const ipph = runwayFormats("IPPH")[0]!;
-    expect(makeItem({ apt: "IPPH", position: "TWR", format: ipph, items: [] }, "dep-stand", 0)).toBeNull(); // no ground map
+    const itko = runwayFormats("ITKO")[0]!;
+    expect(makeItem({ apt: "ITKO", position: "TWR", format: itko, items: [] }, "dep-stand", 0)).toBeNull(); // no ground map
     expect(makeItem({ apt: "IRFD", position: "TWR", format, items: [] }, "dep-stand", 0)?.stand).toBeTruthy();
   });
 
-  it("TWR: every stand occupied, pushing to the departure runway one after another, nothing spawned on a runway", () => {
+  it("TWR: every stand occupied, nothing spawned on a runway", () => {
     const stands = getGroundGraph("IRFD")?.stands.length ?? 0;
     const plan = planSweatbox({ apt: "IRFD", position: "TWR", runway: "25", level: "normal", durationMin: 30 });
     const parked = plan.items.filter((i) => (i.kind === "dep-stand" || i.kind === "cct-ga") && i.time === 0);
@@ -124,17 +126,11 @@ describe("generated sweatboxes", () => {
     const ga = parked.filter((i) => i.kind === "cct-ga");
     expect(ga.length).toBe(2);
     expect(ga.every((i) => i.runway === "25L" && i.side === "L")).toBe(true);
-    // pushes from 00:20, one every 60 / (perMinute x rate) s; the rest stay parked
-    const every = Math.round(60 / (0.6 * 1));
-    const pushes = parked.map((i) => i.autoDelay).filter((d): d is number => d !== null).sort((a, b) => a - b);
-    expect(pushes[0]).toBe(20);
-    expect(pushes.every((d, k) => d === 20 + k * every)).toBe(true);
     const text = sweatboxScript(plan).text;
     expect(text).not.toContain("departing:");
-    expect(text).toMatch(/^\[00:20\] autodep: callsign=\S+ runway=25L$/m);
     expect(parseScript(text).errors).toEqual([]);
     // no ground map: arrivals only, still nothing on a runway
-    expect(sweatboxScript(planSweatbox({ apt: "IPPH", position: "TWR", runway: "29", durationMin: 20 })).text).not.toMatch(/departing:|parked:/);
+    expect(sweatboxScript(planSweatbox({ apt: "ITKO", position: "TWR", runway: "20", durationMin: 20 })).text).not.toMatch(/departing:|parked:/);
   });
 
   it("departures fly published fixes toward their destination, climbing to 3000 ft", () => {

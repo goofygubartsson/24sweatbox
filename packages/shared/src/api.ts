@@ -17,6 +17,8 @@ export type ErrorCode =
   | "SCRIPT_ERRORS"
   | "RATE_LIMITED"
   | "FEATURE_DISABLED"
+  | "WRONG_ACCOUNT"
+  | "LINK_CLOSED"
   | "SERVER_ERROR";
 
 export interface ApiError {
@@ -24,6 +26,8 @@ export interface ApiError {
   code: ErrorCode;
   details?: unknown;
   errors?: string[];
+  /** ATC24Academy launch links that can't be used: where to send the student back. */
+  returnUrl?: string;
 }
 
 // ---- auth --------------------------------------------------------------------------------------------
@@ -55,6 +59,8 @@ export interface SessionInfo {
   speed: number;
   elapsedSec: number;
   ended: boolean;
+  /** The ATC24Academy assessment this session runs, if any. */
+  academyId: string | null;
 }
 
 export interface ScenarioInfo {
@@ -333,7 +339,52 @@ export interface Snapshot {
   log: LogEntryDTO[];
   cmds: CmdDTO[];
   clients?: ClientDTO[];
+  /** The ATC24Academy assessment this session runs, if any. */
+  academyId: string | null;
 }
+
+// ---- ATC24Academy assessments (the web side; the academy's own API is apps/server/src/academy) ------
+
+export type AcademyStatus = "reserved" | "completed" | "cancelled";
+
+/** An academy-booked session as the host or its student sees it. */
+export interface AcademyView {
+  id: string;
+  status: AcademyStatus;
+  /** Code of the running sweatbox session, when the host has started one. */
+  liveCode: string | null;
+  scheduledAt: string;
+  course: string;
+  module: string;
+  assessmentType: string | null;
+  instructions: string;
+  passingCriteria: string;
+  student: string;
+  host: string | null;
+  returnUrl: string;
+  outcome: "pass" | "fail" | null;
+  /** Host view only. */
+  hostDiscordId?: string;
+  inviteStatus?: "sent" | "pending" | "failed";
+  inviteError?: string | null;
+  /** Host view only: delivery of the result to the academy. */
+  resultDelivery?: "pending" | "delivered" | "failed" | null;
+}
+
+export interface AcademyLaunchResult {
+  view: AcademyView;
+}
+
+export const AcademyLaunchBody = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,100}$/, "That launch link is broken") }).strict();
+
+export const AcademyCompleteBody = z
+  .object({
+    outcome: z.enum(["pass", "fail"]),
+    score: z.number().int().min(0).max(100).nullable().optional(),
+    feedback: z.string().trim().max(5000).nullable().optional(),
+  })
+  .strict();
+export type AcademyCompleteBody = z.infer<typeof AcademyCompleteBody>;
 
 // ---- WebSocket ---------------------------------------------------------------------------------------
 

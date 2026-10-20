@@ -8,6 +8,7 @@ import type { DiscordClient } from "./auth/discord";
 import type { SessionManager } from "./sessions/manager";
 import type { ScenarioLibrary } from "./sessions/scenarios";
 import type { RateLimiter } from "./rateLimit";
+import type { AcademyService } from "./academy/service";
 import { HttpError } from "./errors";
 
 export interface Deps {
@@ -19,6 +20,7 @@ export interface Deps {
   sessions: SessionManager;
   scenarios: ScenarioLibrary;
   limiter: RateLimiter;
+  academy: AcademyService;
 }
 
 /** Session token from the sb_session cookie or an Authorization: Bearer header. */

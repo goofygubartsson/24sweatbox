@@ -8,6 +8,7 @@ import aircraftJson from "./data/aircraft.json";
 import callsignsJson from "./data/callsigns.json";
 import outlinesJson from "./data/outlines.json";
 import sectorsJson from "./data/sectors.json";
+import msaJson from "./data/msa.json";
 import groundJson from "./data/ground.json";
 import groundArtJson from "./data/groundArt.json";
 import type {
@@ -19,6 +20,7 @@ import type {
   GroundMapData,
   Outlines,
   RunwayPairData,
+  MsaArea,
   Sectors,
   SidTable,
 } from "./dataTypes";
@@ -56,6 +58,7 @@ export const aircraftData: AircraftData = aircraftJson as unknown as AircraftDat
 export const callsignData: CallsignData = callsignsJson as unknown as CallsignData;
 export const outlines: Outlines = outlinesJson as unknown as Outlines;
 export const sectors: Sectors = sectorsJson as unknown as Sectors;
+export const msaAreas: MsaArea[] = msaJson as unknown as MsaArea[];
 export const groundMapsData: Record<string, GroundMapData> = groundJson as unknown as Record<string, GroundMapData>;
 export const groundArt: Record<string, GroundArt> = groundArtJson as unknown as Record<string, GroundArt>;
 

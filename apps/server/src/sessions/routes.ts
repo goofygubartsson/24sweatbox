@@ -35,10 +35,11 @@ function generate(spec: GenerateSpec): { name: string; text: string } {
 export function sessionRoutes(app: FastifyInstance, deps: Deps): void {
   const { sessions, scenarios, limiter, store } = deps;
 
-  const sessionOr404 = (req: FastifyRequest): Session => {
+  const sessionOr404 = (req: FastifyRequest, u?: UserRow): Session => {
     const code = (req.params as { code: string }).code;
     const s = SESSION_CODE_RE.test(code) ? sessions.get(code) : undefined;
-    if (!s) throw notFound("NO_SESSION", "No session with that code");
+    // ATC24Academy sessions are only visible to the hosts and their student
+    if (!s || (u && !deps.academy.canJoin(s, u))) throw notFound("NO_SESSION", "No session with that code");
     return s;
   };
 
@@ -68,13 +69,13 @@ export function sessionRoutes(app: FastifyInstance, deps: Deps): void {
   });
 
   app.get("/api/sessions/:code", async (req) => {
-    await requireUser(req, deps);
-    return sessionOr404(req).info();
+    const u = await requireUser(req, deps);
+    return sessionOr404(req, u).info();
   });
 
   app.get("/api/sessions/:code/state", async (req) => {
     const u = await requireUser(req, deps);
-    const s = sessionOr404(req);
+    const s = sessionOr404(req, u);
     present(s, u);
     const q = req.query as Record<string, string | undefined>;
     const since = Number(q.since ?? 0) || 0;
@@ -143,13 +144,15 @@ export function sessionRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post("/api/sessions/:code/end", async (req) => {
     await requireHost(req, deps);
-    return sessions.end(sessionOr404(req));
+    const s = sessionOr404(req);
+    deps.academy.assertEndable(s);
+    return sessions.end(s);
   });
 
   app.get("/api/sessions/:code/replay", async (req, reply) => {
-    await requireUser(req, deps);
+    const u = await requireUser(req, deps);
     const code = (req.params as { code: string }).code;
-    if (!SESSION_CODE_RE.test(code)) throw notFound("NO_SESSION", "No session with that code");
+    if (!SESSION_CODE_RE.test(code) || !deps.academy.canSeeReplay(code, u)) throw notFound("NO_SESSION", "No session with that code");
     const live = sessions.get(code);
     const json = live ? JSON.stringify(live.replay()) : store.getReplay(code);
     if (!json) throw notFound("NO_SESSION", "No replay for that code (it may have expired)");
@@ -176,7 +179,7 @@ export function sessionRoutes(app: FastifyInstance, deps: Deps): void {
   app.post("/api/sessions/:code/strips", async (req, reply) => {
     const u = await requireUser(req, deps);
     limiter.hit(`strips:${u.id}`, L.stripsPerSec);
-    const s = sessionOr404(req);
+    const s = sessionOr404(req, u);
     const body = parseBody(StripBody, req.body);
     s.setStrip(body.callsign, body.key, body.value);
     present(s, u);

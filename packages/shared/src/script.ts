@@ -5,6 +5,7 @@
 //   [sweatbox]
 //   name = TWR-IRFD-25                  optional
 //   airport = IRFD                      the airport the runways and stands below belong to
+//   position = TWR                      optional: the position trained (DEL: cleared departures leave)
 //   view = TWR                          CTR, GND or TWR: what every scope shows
 //   departure runway = 25R              optional: extended centrelines on the scope...
 //   arrival runways = 25L, 25C          ...for these runways
@@ -43,9 +44,7 @@ export type ScriptCommand = Base &
     | { kind: "SPAWN"; cs: string; type: string; alt: number; rfl: string; gs: number; route: string; dep: string; arr: string; x: number; y: number }
     | { kind: "DEP"; cs: string; type: string; runway: string; climb: number; rfl: string; route: string; arr: string; spd: number }
     | { kind: "GATE"; cs: string; type: string; apt: string; stand: string; rfl: string; route: string; arr: string }
-    | { kind: "AUTO"; cs: string; runway: string; clr?: boolean; full?: boolean }
     | { kind: "APPR"; cs: string; runway: string }
-    | { kind: "AUTOLAND"; cs: string }
     | { kind: "CCT"; cs: string; runway: string; side: "L" | "R"; tng: boolean; join: JoinLeg }
     | { kind: "CLMB"; cs: string; ft: number }
     | { kind: "ROLLOUT"; mode: RolloutMode }
@@ -66,7 +65,12 @@ export interface ScriptHeader {
   depRunway: string | null;
   arrRunways: string[];
   afterLanding: RolloutMode | null;
+  /** The position trained (DEL: a departure is removed a minute after its clearance). */
+  position?: TrainedPosition;
 }
+
+export const TRAINED_POSITIONS = ["DEL", "GND", "TWR", "APP", "CTR"] as const;
+export type TrainedPosition = (typeof TRAINED_POSITIONS)[number];
 
 export interface ParseResult {
   ok: boolean;
@@ -248,37 +252,11 @@ export const EVENTS: Record<string, EventSpec> = {
       },
     ],
   },
-  autodep: {
-    required: ["callsign", "runway"],
-    optional: ["when", "takeoff"],
-    help: "a parked aircraft pushes, taxis to a holding point and waits for the controller (takeoff=auto: also lines up and takes off by itself; when=cleared: only after the C tick, then all by itself)",
-    build: (f, airport) => {
-      const when = (f.get("when") ?? "now").toLowerCase();
-      if (when !== "now" && when !== "cleared") fail(`invalid when "${f.get("when")}" (now, cleared)`);
-      const takeoff = (f.get("takeoff") ?? "controller").toLowerCase();
-      if (takeoff !== "controller" && takeoff !== "auto") fail(`invalid takeoff "${f.get("takeoff")}" (controller, auto)`);
-      return [
-        {
-          kind: "AUTO",
-          cs: callsign(f.get("callsign")),
-          runway: runwayOn(airport, f.get("runway")),
-          ...(when === "cleared" ? { clr: true } : {}),
-          ...(takeoff === "auto" && when !== "cleared" ? { full: true } : {}),
-        },
-      ];
-    },
-  },
   approach: {
     required: ["callsign", "runway"],
     optional: [],
     help: "cleared for the approach",
     build: (f, airport) => [{ kind: "APPR", cs: callsign(f.get("callsign")), runway: runwayOn(airport, f.get("runway")) }],
-  },
-  autoland: {
-    required: ["callsign"],
-    optional: [],
-    help: "an airborne aircraft flies its route, then joins a final at its destination and lands by itself, keeping its own separation, until a controller instructs it",
-    build: (f) => [{ kind: "AUTOLAND", cs: callsign(f.get("callsign")) }],
   },
   circuit: {
     required: ["callsign", "runway", "side"],
@@ -339,7 +317,7 @@ export const SCRIPT_USAGE: Record<string, string> = Object.fromEntries(
 
 // ---- header -------------------------------------------------------------------------------------------
 
-const HEADER_KEYS = ["name", "airport", "view", "departure runway", "arrival runways", "after landing"] as const;
+const HEADER_KEYS = ["name", "airport", "position", "view", "departure runway", "arrival runways", "after landing"] as const;
 const AFTER_LANDING: Record<string, RolloutMode> = { REMOVE: "OFF", HOLD: "HOLD", STAND: "STAND" };
 
 function headerCommands(h: ScriptHeader): Parsed[] {
@@ -426,7 +404,13 @@ function buildHeader(h: Partial<Record<(typeof HEADER_KEYS)[number], string>>): 
     depRunway: h["departure runway"] ? designator(h["departure runway"]) : null,
     arrRunways: h["arrival runways"] ? h["arrival runways"].split(/[\s,]+/).filter(Boolean).map(designator) : [],
     afterLanding: h["after landing"] ? choice(AFTER_LANDING, "after landing", h["after landing"]) : null,
+    ...(h.position ? { position: trainedPosition(h.position) } : {}),
   };
+}
+
+function trainedPosition(s: string): TrainedPosition {
+  const p = s.toUpperCase() as TrainedPosition;
+  return TRAINED_POSITIONS.includes(p) ? p : fail(`invalid position "${s}" (${TRAINED_POSITIONS.join(", ")})`);
 }
 
 /** Semantic checks against the world data. Returns warning texts (without the "Line N:" prefix). */
@@ -468,7 +452,6 @@ function semanticWarnings(c: ScriptCommand, spawned: Set<string>): string[] {
       spawned.add(c.cs);
       break;
     }
-    case "AUTO":
     case "APPR":
     case "CCT":
       rwy(c.runway);
@@ -479,7 +462,6 @@ function semanticWarnings(c: ScriptCommand, spawned: Set<string>): string[] {
     case "SPD":
     case "HDG":
     case "EMERGENCY":
-    case "AUTOLAND":
       known(c.cs);
       break;
   }
@@ -596,6 +578,7 @@ export function formatHeader(h: ScriptHeader): string[] {
     "[sweatbox]",
     ...(h.name ? [`name = ${h.name}`] : []),
     `airport = ${h.airport}`,
+    ...(h.position ? [`position = ${h.position}`] : []),
     `view = ${h.view}`,
     ...(h.depRunway ? [`departure runway = ${h.depRunway}`] : []),
     ...(h.arrRunways.length ? [`arrival runways = ${h.arrRunways.join(", ")}`] : []),
@@ -646,20 +629,11 @@ export function formatCommand(c: ScriptCommand | CommandInput, airport: string):
         ["to", c.arr],
         ["airport", c.apt !== airport ? c.apt : null],
       ]);
-    case "AUTO":
-      return eventLine(t, "autodep", [
-        ["callsign", c.cs],
-        ["runway", rwy(c.runway)],
-        ["when", c.clr ? "cleared" : null],
-        ["takeoff", c.full && !c.clr ? "auto" : null],
-      ]);
     case "APPR":
       return eventLine(t, "approach", [
         ["callsign", c.cs],
         ["runway", rwy(c.runway)],
       ]);
-    case "AUTOLAND":
-      return eventLine(t, "autoland", [["callsign", c.cs]]);
     case "CCT":
       return eventLine(t, "circuit", [
         ["callsign", c.cs],

@@ -27,7 +27,6 @@ describe("parseScript", () => {
         "[00:11] departing: callsign=RYR1 type=B738 runway=IRFD-25R climb=4000 level=FL260 route=KENED2.JOOPY,POPPY to=IMLR speed=230",
         "[00:12] parked: callsign=DLH12 type=A320 stand=5 level=FL300 route=HDG090 to=ITKO climb=5000",
         "[00:12] parked: callsign=N12 type=C172 stand=any level=FL010 route=CCT to=IRFD",
-        "[00:13] autodep: callsign=DLH12 runway=25R when=cleared",
         "[00:14] circuit: callsign=N12 runway=25C side=left type=full-stop join=base",
         "[00:15] climb: callsign=DLH12 altitude=6000",
         "[00:17] assign: callsign=BAW3847 altitude=3000 speed=180 heading=0",
@@ -42,7 +41,7 @@ describe("parseScript", () => {
     expect(r.commands.map((c) => c.kind)).toEqual([
       // the settings: everyone's scope view and runways, what happens after landing
       "CMD", "CMD", "ROLLOUT",
-      "SPAWN", "APPR", "DEP", "DEP", "GATE", "CLMB", "GATE", "AUTO", "CCT", "CLMB", "ALT", "SPD", "HDG", "EMERGENCY", "COMMENT", "COMMENT",
+      "SPAWN", "APPR", "DEP", "DEP", "GATE", "CLMB", "GATE", "CCT", "CLMB", "ALT", "SPD", "HDG", "EMERGENCY", "COMMENT", "COMMENT",
     ]);
     expect(r.commands[0]).toMatchObject({ kind: "CMD", text: "LDARPT IRFD TWR", offset: 0 });
     expect(r.commands[1]).toMatchObject({ kind: "CMD", text: "RWYCFG IRFD 25R 25L,25C" });
@@ -54,11 +53,10 @@ describe("parseScript", () => {
     expect(r.commands[7]).toMatchObject({ kind: "GATE", apt: "IRFD", stand: "5", arr: "ITKO" });
     expect(r.commands[8]).toMatchObject({ kind: "CLMB", cs: "DLH12", ft: 5000 });
     expect(r.commands[9]).toMatchObject({ kind: "GATE", stand: "*", route: "CCT", rfl: "010" });
-    expect(r.commands[10]).toMatchObject({ kind: "AUTO", clr: true });
-    expect(r.commands[11]).toMatchObject({ kind: "CCT", side: "L", tng: false, join: "BASE" });
-    expect(r.commands[15]).toMatchObject({ kind: "HDG", value: 360 });
-    expect(r.commands[17]).toMatchObject({ kind: "COMMENT", text: "Hello   world" });
-    expect(r.commands[18]).toMatchObject({ kind: "COMMENT", text: "An hour in", offset: 3600 });
+    expect(r.commands[10]).toMatchObject({ kind: "CCT", side: "L", tng: false, join: "BASE" });
+    expect(r.commands[14]).toMatchObject({ kind: "HDG", value: 360 });
+    expect(r.commands[16]).toMatchObject({ kind: "COMMENT", text: "Hello   world" });
+    expect(r.commands[17]).toMatchObject({ kind: "COMMENT", text: "An hour in", offset: 3600 });
   });
 
   it("circuits default to touch-and-go joining downwind; the view to CTR; nothing after landing", () => {
@@ -92,7 +90,7 @@ describe("parseScript", () => {
       "Line 4: airborne needs type, position, altitude, speed, level, route, from, to (callsign=… type=… position=… altitude=… speed=… level=… route=… from=… to=…)",
       'Line 5: invalid time "[0:61]" (seconds 00-59)',
       'Line 6: invalid HDG route "HDGxx"',
-      'Line 7: unknown event "fly" (parked, airborne, departing, autodep, approach, autoland, circuit, climb, assign, emergency, message)',
+      'Line 7: unknown event "fly" (parked, airborne, departing, approach, circuit, climb, assign, emergency, message)',
       'Line 8: invalid side "up" (left, right)',
       'Line 9: approach has no field "wind" (callsign=… runway=…)',
       'Line 10: expected "[mm:ss] event: key=value …" (settings go before the first event)',
@@ -109,7 +107,7 @@ describe("parseScript", () => {
       ["[00:00] assign: callsign=BAW1", "assign needs altitude, speed or heading"],
       ["[00:00] airborne: callsign=B type=A320 position=1,2 altitude=3000 speed=250 level=300 route=HDG250 from=IRFD to=ITKO", 'invalid callsign "B"'],
       ["[00:00] airborne: callsign=BAW1 type=A320 position=1,two altitude=3000 speed=250 level=300 route=HDG250 from=IRFD to=ITKO", 'invalid coordinate "two"'],
-      ["[00:00] autodep: callsign=BAW1 runway=25R when=later", 'invalid when "later"'],
+      ["[00:00] autodep: callsign=BAW1 runway=25R", 'unknown event "autodep"'],
       ["[00:00] approach: callsign=BAW1 runway=25L callsign=BAW2", "callsign given twice"],
       ["[00:00] message:", 'message needs text="…"'],
     ] as const;
@@ -153,11 +151,8 @@ describe("parseScript", () => {
       "[00:11] departing: callsign=RYR1 type=B738 runway=25R climb=4000 level=FL260 route=POPPY to=IMLR speed=230",
       "[00:12] parked: callsign=DLH12 type=A320 stand=5 level=FL300 route=HDG090 to=ITKO",
       "[00:12] parked: callsign=DLH13 type=A320 stand=any level=FL300 route=HDG090 to=ITKO airport=IPPH",
-      "[00:13] autodep: callsign=DLH12 runway=25R when=cleared",
-      "[00:13] autodep: callsign=DLH13 runway=25R takeoff=auto",
       "[00:14] circuit: callsign=N12 runway=25C side=left type=full-stop join=base",
       "[00:15] assign: callsign=BAW3847 heading=270",
-      "[00:16] autoland: callsign=BAW3847",
       '[00:19] message: text="Hello world"',
     ];
     const text = [...formatHeader(header), "", ...events].join("\n");
@@ -173,23 +168,6 @@ describe("parseScript", () => {
       const r = parseScript(fs.readFileSync(path.join(dir, f), "utf8"));
       expect(r.errors, f).toEqual([]);
     }
-  });
-
-  it("autoland, and autodep takeoff=auto", () => {
-    const r = parseScript(
-      file(
-        "[00:00] airborne: callsign=QTR8 type=A359 position=6.697,1.884 altitude=6000 speed=250 level=FL060 route=GAVIN,SETHR from=IPPH to=IRFD\n" +
-          "[00:00] autoland: callsign=QTR8\n" +
-          "[00:00] parked: callsign=RYR1 type=B738 stand=3 level=FL250 route=LAVNO,ANYMS to=ISKP\n" +
-          "[00:30] autodep: callsign=RYR1 runway=25L takeoff=auto",
-      ),
-    );
-    expect(r.errors).toEqual([]);
-    expect(r.commands.find((c) => c.kind === "AUTOLAND")).toMatchObject({ cs: "QTR8" });
-    expect(r.commands.find((c) => c.kind === "AUTO")).toMatchObject({ runway: "IRFD-25L", full: true });
-    expect(r.commands.find((c) => c.kind === "AUTO")).not.toHaveProperty("clr");
-    expect(parseScript(file("[00:00] autodep: callsign=X1 runway=25L takeoff=maybe")).errors[0]).toMatch(/invalid takeoff "maybe" \(controller, auto\)/);
-    expect(parseScript(file("[00:00] autoland: callsign=NOPE")).warnings[0]).toMatch(/NOPE isn't there yet/);
   });
 });
 
@@ -221,17 +199,17 @@ describe("converting old files", () => {
         "arrival runways = 25L, 25C",
         "after landing = stand",
         "",
+        '# dropped "10 AUTO AAL1 IRFD-25R CLR" (automatic departures are no longer part of the sim)',
         '# dropped "60 CMD FIXES" (scope commands are now the [sweatbox] settings)',
         "[00:00] airborne: callsign=BAW1 type=A320 position=28.41,7.135 altitude=3000 speed=180 level=FL300 route=HDG247 from=ITKO to=IRFD",
         "[00:02] approach: callsign=BAW1 runway=25L",
         "[00:10] parked: callsign=AAL1 type=A320 stand=any level=FL300 route=HDG090 to=IPPH",
         "[00:10] climb: callsign=AAL1 altitude=4000",
-        "[00:10] autodep: callsign=AAL1 runway=25R when=cleared",
         '[01:10] message: text="Last one."',
         "",
       ].join("\n"),
     );
-    expect(notes).toHaveLength(1);
+    expect(notes).toHaveLength(2); // the CMD, and the AUTO line (automatic departures are gone)
     expect(parseScript(text).errors).toEqual([]);
   });
 });

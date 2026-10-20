@@ -81,7 +81,7 @@ export function attachWebSocket(server: Server, deps: Deps): { close(): void } {
       c.viewer.host = Boolean(u.is_host);
       if (msg.t === "join") {
         const s = deps.sessions.get(msg.code);
-        if (!s) {
+        if (!s || !deps.academy.canJoin(s, u)) {
           ws.close(WS_CLOSE_NO_SESSION, "No such session");
           return;
         }

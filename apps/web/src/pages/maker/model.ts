@@ -89,14 +89,13 @@ export function validate(d: MakerDraft, gen: GeneratedScript): Issue[] {
     ...r.errors.map((e) => ({ text: e, level: "error" as const, itemId: gen.lineItem.get(lineOf(e)) ?? null })),
     ...r.warnings.map((w) => ({ text: w, level: "warning" as const, itemId: gen.lineItem.get(lineOf(w)) ?? null })),
   ];
-  const parked = d.items.filter((i) => (i.kind === "dep-stand" || i.kind === "cct-ga") && i.stand);
-  const until = (i: SweatboxItem) => (i.autoDelay === null ? Infinity : i.time + i.autoDelay + cfg.generator.standOccupySec);
+  const parked = d.items.filter((i) => (i.kind === "dep-stand" || i.kind === "cct-ga") && i.stand && i.stand !== "*");
   for (let i = 0; i < parked.length; i++)
     for (let j = i + 1; j < parked.length; j++) {
       const a = parked[i]!;
       const b = parked[j]!;
-      if (a.stand.toUpperCase() === b.stand.toUpperCase() && a.time < until(b) && b.time < until(a))
-        issues.push({ text: `Stand ${d.apt}-${a.stand} is used by ${a.cs} and ${b.cs} at the same time`, level: "warning", itemId: b.id });
+      if (a.stand.toUpperCase() === b.stand.toUpperCase())
+        issues.push({ text: `Stand ${d.apt}-${a.stand} is used by both ${a.cs} and ${b.cs}`, level: "warning", itemId: b.id });
     }
   const seen = new Set<string>();
   for (const it of d.items) {

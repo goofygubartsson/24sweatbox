@@ -1,53 +1,41 @@
 # Sample scenario written for development. It is NOT one of the 18 legacy scenarios.
 #
-# Rockford tower, 20 minutes: every stand starts occupied and the aircraft push and taxi to the
-# 25L holding point by themselves, one after another (two of them GA circuit flights). Clear them
-# for takeoff; departures fly their route and land at their destination. Arrivals on final for 25C
-# and 25R need a landing clearance, then cross 25L to a stand.
+# Rockford tower, 20 minutes: every stand starts occupied (two of them GA circuit flights), waiting
+# for push and taxi to 25L. Departures fly their route toward their destination. Arrivals on final
+# for 25C and 25R need a landing clearance, then cross 25L to a stand.
 
 [sweatbox]
 name = TWR-IRFD-DEMO
 airport = IRFD
+position = TWR
 view = TWR
 departure runway = 25L
 arrival runways = 25C, 25R
 after landing = stand
 
-[00:00] message: text="Rockford tower demo: departures hold short of 25L, arrivals need LAND or they go around."
+[00:00] message: text="Rockford tower demo: departures off 25L, arrivals need LAND or they go around."
 [00:00] parked: callsign=N604RG type=C182 stand=1 level=FL010 route=CCT to=IRFD
 [00:00] circuit: callsign=N604RG runway=25L side=left join=upwind
-[02:00] autodep: callsign=N604RG runway=25L
 [00:00] parked: callsign=N193XA type=P28A stand=2 level=FL010 route=CCT to=IRFD
 [00:00] circuit: callsign=N193XA runway=25L side=left join=upwind
-[07:00] autodep: callsign=N193XA runway=25L
 [00:00] parked: callsign=EIN517 type=A332 stand=3 level=FL300 route=GODLU to=ITRC climb=3000
-[00:20] autodep: callsign=EIN517 runway=25L
 [00:00] parked: callsign=AFR2020 type=A359 stand=4 level=FL350 route=GODLU to=ITRC climb=3000
-[15:20] autodep: callsign=AFR2020 runway=25L
 [00:00] parked: callsign=QFA7237 type=DH8D stand=5 level=FL350 route=JAMSI,LAZER to=ILAR climb=3000
-[12:00] autodep: callsign=QFA7237 runway=25L
 [00:00] parked: callsign=EIN3229 type=E190 stand=6 level=FL300 route=SETHR,GAVIN,VOX to=ILKL climb=3000
 [00:00] parked: callsign=NKS8098 type=DH8D stand=7 level=FL350 route=HAWFA,INDEX,JOOPY,ONDER to=IDCS climb=3000
 [00:00] parked: callsign=UAE3108 type=A321 stand=8 level=FL350 route=MOGTA to=IGAR climb=3000
-[08:40] autodep: callsign=UAE3108 runway=25L
 [00:00] parked: callsign=UAL207 type=A359 stand=9 level=FL350 route=BLA to=IBLT climb=3000
-[18:40] autodep: callsign=UAL207 runway=25L
 [00:00] parked: callsign=EIN119 type=E190 stand=10 level=FL350 route=BLA to=IMLR climb=3000
 [00:00] parked: callsign=EXS412 type=A320 stand=11 level=FL240 route=ATPEV,CAWZE,DOGGO to=IJAF climb=3000
-[05:20] autodep: callsign=EXS412 runway=25L
 [00:00] parked: callsign=EXS443 type=DH8D stand=12 level=FL300 route=SETHR,GAVIN,VOX to=IPPH climb=3000
-[10:20] autodep: callsign=EXS443 runway=25L
 [00:00] parked: callsign=AZU7824 type=B752 stand=13 level=FL350 route=SETHR,GAVIN,VOX to=ILKL climb=3000
 [00:00] parked: callsign=EXS105 type=CRJ7 stand=14 level=FL350 route=LAVNO,CAWZE,CYRIL to=ISCM climb=3000
 [00:00] parked: callsign=BAW4557 type=AT76 stand=15 level=FL240 route=ATPEV,CAWZE,DOGGO to=IJAF climb=3000
 [00:00] parked: callsign=CPA160 type=B738 stand=16 level=FL240 route=BLA to=IBLT climb=3000
-[17:00] autodep: callsign=CPA160 runway=25L
 [00:00] parked: callsign=CPA2326 type=B77W stand=17 level=FL300 route=GRY,LOGAN,SEEKS to=ISAU climb=3000
-[03:40] autodep: callsign=CPA2326 runway=25L
 [00:00] parked: callsign=AFL9677 type=CRJ7 stand=18 level=FL350 route=HAWFA,RES,JOOPY,ONDER to=IBRD climb=3000
 [00:00] parked: callsign=ACA1492 type=AT76 stand=19 level=FL300 route=SETHR,GAVIN,VOX to=IPPH climb=3000
 [00:00] parked: callsign=SWR6171 type=A333 stand=20 level=FL350 route=BLA to=IBLT climb=3000
-[13:40] autodep: callsign=SWR6171 runway=25L
 [00:00] airborne: callsign=AFL3553 type=AT76 position=23.08075,8.96216 altitude=2500 speed=180 level=FL240 route=HDG247 from=IIAB to=IRFD
 [00:00] approach: callsign=AFL3553 runway=25C
 [01:40] airborne: callsign=EIN5592 type=B77W position=21.85709,9.24456 altitude=2500 speed=180 level=FL240 route=HDG247 from=IIAB to=IRFD

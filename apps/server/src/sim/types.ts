@@ -72,25 +72,6 @@ export interface TaxiRequest {
   target: string;
 }
 
-/**
- * An automatic departure (script AUTO). Without CLR it pushes and taxis to a holding point for the
- * runway, then waits for the controller. With CLR (DEL sweatboxes) it first waits for the strip
- * clearance, then also crosses runways, lines up and takes off by itself.
- */
-export interface AutoState {
-  /** Departure runway end, "IRFD-25R". */
-  rwy: string;
-  /** The runway it was given; `rwy` moves to the next runway set when this one's queue is full. */
-  primary: string;
-  /** Cleared aircraft run the whole departure by themselves (AUTO ... CLR). */
-  full: boolean;
-  phase: "clearance" | "push" | "taxi" | "depart" | "lined";
-  /** Holding point it is taxiing to. */
-  hold: string | null;
-  /** Sim time of the next check while waiting. */
-  nextCheck: number;
-}
-
 export interface GroundState {
   apt: string;
   mode: GroundMode;
@@ -127,8 +108,6 @@ export interface GroundState {
   rolloutExitAt: number | null;
   /** Holding points ahead where the aircraft must stop before crossing a runway (until CONT). */
   crossStops: { node: number; rwy: string }[];
-  /** Automatic departure, if any. */
-  auto: AutoState | null;
 }
 
 export interface Aircraft {
@@ -158,18 +137,6 @@ export interface Aircraft {
   dep: DepartureState | null;
   /** Fly to the destination when there is nothing else to do (removed within arrivalRemoveNm). */
   homing: boolean;
-  /**
-   * A departure to another airport: after its route it flies to a point on a final there (`rwy`,
-   * chosen at the end of the route), lands and is removed.
-   */
-  autoLand: { rwy: string | null } | null;
-  /**
-   * Flying on its own after a ground departure (sim time of the lift-off, which also orders who
-   * gives way); null once a controller instructs it. Such aircraft keep separation by themselves.
-   */
-  autoFlight: number | null;
-  /** Temporary limits from the automatic separation (on top of the assigned altitude and speed). */
-  sepLimit: SepLimit | null;
   arr: string | null;
   gnd: GroundState | null;
   landing: LandingState | null;
@@ -180,14 +147,6 @@ export interface Aircraft {
   scriptTag: { alt?: number; heading?: number; speed?: number; seq: number } | null;
   /** Removed at the end of the tick. */
   gone: boolean;
-}
-
-export interface SepLimit {
-  altMax?: number;
-  altMin?: number;
-  speedMax?: number;
-  /** No level keeps it clear of those it gives way to: they give way to it as well. */
-  stuck?: boolean;
 }
 
 export type { JoinLeg };

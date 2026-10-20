@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import cfg from "@sweatbox/config/public";
 import { SESSION_CODE_RE } from "@sweatbox/shared";
-import { usePath, navigate } from "./lib/router";
+import { usePath, navigate, useSearch } from "./lib/router";
 import { useAuth } from "./lib/auth";
 import { Toaster } from "./components/Toast";
 import { Header } from "./components/Header";
@@ -9,6 +9,7 @@ import { Home } from "./pages/Home";
 import { ScopePage } from "./pages/ScopePage";
 import { ReplayPage } from "./pages/ReplayPage";
 import { MakerPage } from "./pages/maker/MakerPage";
+import { AcademyPage, JoinPage } from "./pages/AcademyPage";
 
 function NotFound() {
   return (
@@ -25,6 +26,7 @@ function NotFound() {
 
 export function App() {
   const path = usePath();
+  const search = useSearch();
   const refresh = useAuth((s) => s.refresh);
   useEffect(() => {
     void refresh();
@@ -41,7 +43,12 @@ export function App() {
 
   let page: JSX.Element;
   const session = /^\/s\/([^/]+)$/.exec(path);
+  // ATC24Academy launch links: /join/<token> (the session's link) or /join?token=<one-time token>
+  const joinToken = /^\/join\/([A-Za-z0-9_-]{20,100})$/.exec(path)?.[1] ?? (path === "/join" ? search.get("token") : null);
+  const academy = /^\/academy\/(sb_[A-Za-z0-9_-]{8,100})$/.exec(path);
   if (path === "/") page = <Home />;
+  else if (joinToken) page = <JoinPage key={joinToken} token={joinToken} />;
+  else if (academy) page = <AcademyPage key={academy[1]} id={academy[1]!} />;
   else if (session) {
     if (!SESSION_CODE_RE.test(session[1]!)) {
       navigate("/", true);

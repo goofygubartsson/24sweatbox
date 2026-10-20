@@ -101,29 +101,6 @@ const config = {
     gaSpeedKt: 180, // ...at least this fast
     fixPassNm: 0.15, // a fix counts as passed within this distance (0.5 map units)
     arrivalRemoveNm: 2, // homing arrivals are removed this close to their destination
-    // departures to another airport fly their route, then join a final there, land and are removed
-    autoLandFinalNm: 6, // join the extended centreline this far out
-    autoLandSpeedKt: 180, // speed from the end of the route until short final
-    // automatic separation: aircraft flying on their own after a ground departure (until a controller
-    // instructs them) keep sepLossNm / sepLossFt from everyone. They look ahead along their route and
-    // level off below or climb above conflicting traffic, and slow down behind traffic ahead.
-    autoSep: {
-      lookaheadSec: 90,
-      stepSec: 3,
-      checkEverySec: 2,
-      bufferNm: 0.3, // aim for this much more than the minimum...
-      bufferFt: 200, // ...and this
-      minAltFt: 1000, // never level off below this to get under traffic (climb above it instead)
-      maxAltFt: 10000, // never climb above this to get over traffic
-      inTrailDeg: 60, // traffic ahead within this angle of our heading: slow down behind it...
-      slowerKt: 10, // ...to this much slower than it
-      minSpeedKt: 160, // slowest an aircraft slows down to (approach speed once established on final)
-      releaseBufferNm: 0.5, // takeoff release and joining a final: this much more again (turns aren't modelled)
-      levelSearchNm: 6, // levels tried: above and below the traffic within this distance
-      finalLookaheadSec: 240, // joining a final: look this far down it
-    },
-    autoLandGapNm: 2, // an auto-landing aircraft holds until the one ahead is this far down the final...
-    autoLandHoldOffsetNm: 2.5, // ...this far to the side of its final point, away from the other (arrival) runways
     interceptMaxDeg: 45, // max intercept angle when steering onto a course (circuits, holds)
     interceptDegPerNm: 60, // intercept angle per NM of cross-track error
     flareTouchdownNm: 0.15, // touchdown point past the threshold when rolling out
@@ -169,20 +146,9 @@ const config = {
     pushTurnRadiusUnits: 0.025,
     turnMinDeg: 12, // corners gentler than this stay as they are
     turnWindowUnits: 0.04, // heading change measured over this distance for the turn speed limit
-    // automatic departures (AUTO, and AUTO ... CLR once the strip is cleared)
-    autoCheckSec: 4, // how often a waiting aircraft re-checks its push / runway
-    autoPushAfterClearSec: 20, // DEL: once the strip is cleared (C), wait this long before pushing back
-    autoClearanceUnits: 0.015, // wingtip margin kept from other traffic when pushing
-    autoDepIntervalSec: 60, // automatic takeoffs from one runway at least this far apart
+    delRemoveAfterClearSec: 60, // DEL sweatboxes: a departure leaves this long after its clearance (C)
     takeoffReleaseFt: 100, // no takeoff roll at an airport until the departure before it is this high
-    autoRunwayQueueMax: 5, // automatic departures: a runway with this many queued -> the next runway set
-    autoArrivalRunwayQueueMax: 2, // ...at most this many on a runway arrivals use too
     exitClearUnits: 0.08, // landing: an exit with someone this close to its holding point isn't used
-    autoDepHoldMaxFraction: 0.5, // departure holds: entries within this share of the runway from its start
-    autoQueuePenaltyUnits: 0.3, // each aircraft already heading for a hold counts as this much extra taxi
-    autoCrossPenaltyUnits: 1, // each runway to cross on the way to a hold counts as this much extra taxi
-    autoArrivalClearNm: 4, // no automatic takeoff with an arrival closer than this on final
-    autoCrossArrivalNm: 3, // no automatic runway crossing with an arrival closer than this
     standRefillSec: 90, // a freed stand gets its next queued aircraft after this long
     standClearUnits: 0.03, // a stand counts as taken while an aircraft is this close to it
     holdLineMarginUnits: 0.006, // at a holding point the nose stops this far short of the red line
@@ -229,23 +195,26 @@ const config = {
       squawk: "#5fd068",
       leader: "#6f6f6f",
     },
+    // the radar: black and greys, as on the original sweatbox scope
     scope: {
-      background: "#0b0d10",
-      coastline: "#6f8f7a",
-      land: "#141a1c",
-      airspace: "#4a515c",
-      runway: "#c9ced6",
-      runwayLabel: "#8e96a3",
-      centreline: "#3d444f",
-      fix: "#5f6b7a",
-      fixLabel: "#6f7a88",
-      navaid: "#7f95a8",
-      airport: "#8e96a3",
-      route: "#8fb3d9",
-      trail: "#6f7a88",
+      background: "#000000", // sea
+      coastline: "#2e2e2e",
+      land: "#1f1f1f",
+      airspace: "#3d3d3d",
+      runway: "#c8c8c8",
+      runwayLabel: "#8f8f8f",
+      centreline: "#3d3d3d",
+      fix: "#6b6b6b",
+      fixLabel: "#7a7a7a",
+      navaid: "#8c8c8c",
+      airport: "#8f8f8f",
+      route: "#bdbdbd",
+      trail: "#6f6f6f",
       ruler: "#d9b54a",
       sepLoss: "#e06666",
       pickNode: "#8fb3d980", // ground node highlight in map-pick mode (with alpha)
+      msa: "#8c8c8c", // minimum safe altitude areas (.MSA)...
+      msaLabel: "#ffffff", // ...and their altitudes
     },
     // GND / SMC view markings (ground-map spec 2.1)
     ground: {
@@ -264,7 +233,7 @@ const config = {
       taxiRoute: "#4fd8ff", // planned taxi route of the selected aircraft
     },
     // design tokens, applied to :root at startup (apps/web/src/styles/tokens.css has the same defaults)
-    // interface: black, greys and white (the radar and ground map colours above are unchanged)
+    // interface: black, greys and white
     theme: {
       background: "#0a0a0a", // pages
       scope: "#0a0a0a", // radar page chrome
@@ -314,6 +283,8 @@ const config = {
     twrArrivalMaxFt: 6000, // TWR view keeps tags for arrivals below this...
     twrArrivalMaxNm: 12, // ...within this distance
     messageLines: 8, // bottom-left message area
+    msaLabelPx: 16, // .MSA altitude labels...
+    msaLabelMinZoom: 25, // ...shown from this many px per map unit (the outlines always)
     depListMaxFt: 100, // GND / TWR departures list: departures leave it climbing through this
     // GND / SMC drawing; widths are screen px (constant at any zoom)
     ground: {
@@ -346,13 +317,7 @@ const config = {
     // that frees up (TWR: the parked aircraft are all the departures there are)
     fillStands: ["DEL", "GND", "TWR"],
     defaultLevel: "normal",
-    autoTaxiAfterSec: 60, // departures added by hand in the Maker push and taxi this long after spawning
-    // TWR: every stand starts occupied; they push and taxi to the departure runway's holding point
-    // one after another, the first this long after the start...
-    twrFirstPushSec: 20,
-    // ...then one every 60 / (perMinute x rateByPosition.TWR) seconds; a few of them fly circuits
-    twrCircuitAircraft: 2,
-    standOccupySec: 120, // a stand counts as in use this long after its aircraft starts pushing
+    twrCircuitAircraft: 2, // TWR: this many of the parked aircraft are GA circuit flights
     finalNm: [8, 10, 12, 15], // arrivals on final spawn at one of these distances
     finalSpeedKt: 180,
     arrivalSpacingNm: 4.5, // arrivals on one runway at least this far apart, even at approach speed on short final
@@ -384,6 +349,19 @@ const config = {
     stripsPerSec: 10, // per user
     sessionCreatePerMin: 5, // per user
     stripValueMax: 60, // characters
+  },
+
+  // ATC24Academy integration (docs/academy-integration.md). Its URL and secrets are in .env.
+  academy: {
+    hostInviteWaitMs: 5000, // answer the academy within this; a slower Discord invite is reported "pending"
+    replayRetentionDays: 90, // replays of academy assessments are kept this long
+    outboxPollSec: 15, // how often the result outbox looks for callbacks to (re)send
+    retryBaseSec: 30, // first retry after a temporary failure, doubling each time...
+    retryMaxSec: 3600, // ...up to this
+    retryForHours: 48, // then give up and flag it for staff
+    callbackTimeoutMs: 10000,
+    requestsPerMin: 120, // academy API calls, per client IP
+    launchesPerMin: 20, // student launch attempts, per user
   },
 
   features: {

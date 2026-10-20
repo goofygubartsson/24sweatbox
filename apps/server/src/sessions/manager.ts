@@ -35,7 +35,8 @@ export class SessionManager {
     for (;;) {
       let code = "";
       for (let i = 0; i < SC.codeLength; i++) code += SC.codeAlphabet[crypto.randomInt(SC.codeAlphabet.length)];
-      if (!this.sessions.has(code)) return code;
+      // an archived replay keeps its code (academy results link to it)
+      if (!this.sessions.has(code) && !this.store.replayExists(code)) return code;
     }
   }
 
@@ -54,7 +55,11 @@ export class SessionManager {
     const already = s.ended;
     const stats = s.end();
     if (!already) {
-      const retentionMs = SC.archiveLongRetention ? SC.archiveLongRetentionDays * 86_400_000 : SC.endedRetentionSec * 1000;
+      const retentionMs = s.academyId
+        ? config.academy.replayRetentionDays * 86_400_000
+        : SC.archiveLongRetention
+          ? SC.archiveLongRetentionDays * 86_400_000
+          : SC.endedRetentionSec * 1000;
       try {
         this.store.archiveReplay(s.code, s.endedAt!, s.endedAt! + retentionMs, JSON.stringify(s.replay()));
       } catch (e) {

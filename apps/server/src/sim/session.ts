@@ -26,14 +26,14 @@ import {
   type TwrBody,
 } from "@sweatbox/shared";
 import type { Aircraft } from "./types";
-import type { Counters, RunwayConfig, SimContext } from "./context";
+import type { Counters, SimContext } from "./context";
 import { stepAirborne } from "./air";
-import { autoTaxi, plannedPath, stepGround } from "./ground";
+import { plannedPath, stepGround } from "./ground";
 import { landingCheck, stepFlare, twrCheck } from "./landing";
 import { arrivalCheck, departureJoin, spawnAirborne, spawnAtGate, spawnDeparture } from "./spawn";
 import { airControl, clearApproach, gndControl, toggleEmergency, twrControl, type ControlResult } from "./control";
 import { makeCircuit } from "./circuit";
-import { autoSeparation, separationExempt } from "./separation";
+import { separationExempt } from "./separation";
 import { HttpError, notFound } from "../errors";
 
 const SC = config.session;
@@ -79,7 +79,6 @@ export class Session implements SimContext {
   scriptName: string | null = null;
   aircraft: Aircraft[] = [];
   strips: Strips = {};
-  lastTakeoff: Record<string, number> = {};
   logEntries: (LogEntryDTO & { wall: number })[] = [];
   logSeq = 0;
   events: ReplayEvent[] = [];
@@ -87,12 +86,17 @@ export class Session implements SimContext {
   counters: Counters = zeroCounters();
   twrMode = false;
   rolloutMode: "OFF" | "HOLD" | "STAND" = "OFF";
-  runwayConfig: RunwayConfig | null = null;
+  /** The position the sweatbox trains ([sweatbox] position, else the POS- of its name). */
+  position: string | null = null;
+  /** DEL: when each departure got its clearance (C), by callsign. */
+  private clearedAt = new Map<string, number>();
   airport: string | null = null;
   ended = false;
   endedAt: number | null = null;
   finalStats: SessionStats | null = null;
   clients = new Map<string, ClientInfo>();
+  /** The ATC24Academy assessment this session runs (only its student and the hosts may join). */
+  academyId: string | null = null;
   cmds: CmdDTO[] = [];
   cmdSeq = 0;
   lastActivity = Date.now();
@@ -157,7 +161,6 @@ export class Session implements SimContext {
     this.scriptName = name;
     this.aircraft = [];
     this.strips = {};
-    this.lastTakeoff = {};
     this.logEntries = [];
     this.events = [];
     this.frames = [];
@@ -168,7 +171,8 @@ export class Session implements SimContext {
     this.delayed = [];
     this.standFreeSince.clear();
     this.rolloutMode = "OFF";
-    this.runwayConfig = null;
+    this.position = parsed.header?.position ?? /^(DEL|GND|TWR|APP|CTR)-/.exec(name)?.[1] ?? null;
+    this.clearedAt.clear();
     this.airport = null;
     this.startedAt = null;
     this.log(`Loaded script "${name}" (${parsed.commands.length} commands)`);
@@ -223,9 +227,8 @@ export class Session implements SimContext {
       }
     }
     this.runPendingGates();
-    // 3. landing check, then automatic separation for aircraft flying on their own
+    // 3. landing check
     for (const ac of this.aircraft) if (!ac.onGround && !ac.gone) landingCheck(ac, this);
-    autoSeparation(this);
     // 4. movement, then the TWR clearance check
     for (const ac of this.aircraft) {
       if (ac.gone) continue;
@@ -240,6 +243,7 @@ export class Session implements SimContext {
       departureJoin(ac, this);
       arrivalCheck(ac, this);
     }
+    if (this.position === "DEL") this.removeCleared();
     this.aircraft = this.aircraft.filter((a) => !a.gone);
     this.counters.peakTraffic = Math.max(this.counters.peakTraffic, this.aircraft.length);
     for (const ac of this.aircraft)
@@ -249,6 +253,24 @@ export class Session implements SimContext {
       }
     this.separationCheck();
     this.recordFrame();
+  }
+
+  /** DEL sweatboxes: a departure is done once cleared; it is removed delRemoveAfterClearSec later. */
+  private removeCleared(): void {
+    for (const ac of this.aircraft) {
+      if (!ac.onGround || ac.gone) continue;
+      if (!this.strips[ac.callsign]?.c) {
+        this.clearedAt.delete(ac.callsign); // clearance taken back
+        continue;
+      }
+      const at = this.clearedAt.get(ac.callsign);
+      if (at === undefined) this.clearedAt.set(ac.callsign, this.simTotal);
+      else if (this.simTotal - at >= config.ground.delRemoveAfterClearSec) {
+        ac.gone = true;
+        this.clearedAt.delete(ac.callsign);
+      }
+    }
+    this.aircraft = this.aircraft.filter((a) => !a.gone);
   }
 
   private separationCheck(): void {
@@ -424,24 +446,6 @@ export class Session implements SimContext {
         // every stand taken: it appears as soon as one frees up
         this.pendingGates.push({ cmd: c, held: [] });
         return;
-      case "AUTO": {
-        const ac = this.need(c.cs, "AUTO");
-        if (ac) autoTaxi(ac, this, c.runway, c.clr ?? false, c.full ?? false);
-        return;
-      }
-      case "AUTOLAND": {
-        const ac = this.need(c.cs, "AUTOLAND");
-        if (!ac) return;
-        if (ac.onGround || !ac.arr) {
-          this.log(`AUTOLAND ${c.cs}: ${ac.onGround ? "aircraft is on the ground" : "no destination"}`, "warn");
-          return;
-        }
-        // its route (if any), then a final at the destination; it keeps its own separation meanwhile
-        ac.homing = true;
-        ac.autoLand ??= { rwy: null };
-        ac.autoFlight ??= this.simTotal;
-        return;
-      }
       case "APPR": {
         const ac = this.need(c.cs, "APPR");
         if (!ac) return;
@@ -526,9 +530,6 @@ export class Session implements SimContext {
           this.airport = m[1]!.toUpperCase();
           this.setTwr((m[2] ?? "CTR").toUpperCase() === "TWR");
         }
-        // RWYCFG <ICAO> <DEP> <ARR,...>: automatic departures overflow onto these runways in order
-        const rc = /^\.?RWYCFG\s+(\S+)\s+(\S+)\s+(\S+)$/i.exec(c.text.trim());
-        if (rc) this.runwayConfig = { apt: rc[1]!.toUpperCase(), dep: rc[2]!.toUpperCase(), arr: rc[3]!.toUpperCase().split(",").filter(Boolean) };
         return;
       }
     }
@@ -711,6 +712,7 @@ export class Session implements SimContext {
       log,
       cmds,
       ...(v.host ? { clients: base.clients } : {}),
+      academyId: this.academyId,
     };
   }
 
@@ -723,6 +725,7 @@ export class Session implements SimContext {
       speed: this.speed,
       elapsedSec: this.elapsedSec,
       ended: this.ended,
+      academyId: this.academyId,
     };
   }
 }

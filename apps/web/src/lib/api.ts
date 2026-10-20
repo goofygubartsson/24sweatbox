@@ -1,6 +1,9 @@
 // Typed REST client for /api (same origin; the session cookie is sent automatically).
 import cfg from "@sweatbox/config/public";
 import type {
+  AcademyCompleteBody,
+  AcademyLaunchResult,
+  AcademyView,
   AirBody,
   AircraftDTO,
   ApiError as ApiErrorBody,
@@ -21,6 +24,8 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public errors?: string[],
+    /** ATC24Academy launch links that can't be used: where to send the student back. */
+    public returnUrl?: string,
   ) {
     super(message);
   }
@@ -47,7 +52,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
     } catch {
       // not JSON
     }
-    throw new ApiError(res.status, e.code ?? "SERVER_ERROR", e.error ?? `Request failed (${res.status})`, e.errors);
+    throw new ApiError(res.status, e.code ?? "SERVER_ERROR", e.error ?? `Request failed (${res.status})`, e.errors, e.returnUrl);
   }
   if (asText) return text as T;
   return (text ? JSON.parse(text) : undefined) as T;
@@ -82,4 +87,11 @@ export const api = {
     request<{ ok: true; aircraft: AircraftDTO }>("POST", `/sessions/${enc(code)}/aircraft/${enc(id)}/twr`, body),
   strip: (code: string, callsign: string, key: string, value: string) =>
     request<void>("POST", `/sessions/${enc(code)}/strips`, { callsign, key, value }),
+
+  // ATC24Academy assessments
+  academyLaunch: (token: string) => request<AcademyLaunchResult>("POST", "/academy/launch", { token }),
+  academySessions: () => request<AcademyView[]>("GET", "/academy/sessions"),
+  academySession: (id: string) => request<AcademyView>("GET", `/academy/sessions/${enc(id)}`),
+  academyStart: (id: string) => request<{ code: string }>("POST", `/academy/sessions/${enc(id)}/start`, {}),
+  academyComplete: (id: string, body: AcademyCompleteBody) => request<AcademyView>("POST", `/academy/sessions/${enc(id)}/complete`, body),
 };

@@ -1,6 +1,7 @@
 # ATC24Academy Sweatbox showcase: Rockford CTR, TWR and GND at once, about 45 minutes.
 #
 # Every departure, arrival and through flight files a route of published fixes and flies it.
+# Nothing is automatic: the aircraft do what the file and the controllers tell them.
 # Load it on the scope with SBLOAD CTR-IRFD-SHOWCASE. Everyone starts on the radar view; LDARPT IRFD
 # TWR or LDARPT IRFD GND switches your own scope to the tower or ground view, and Session > TWR
 # makes Rockford arrivals need a landing clearance.
@@ -15,72 +16,43 @@ after landing = stand
 
 [00:00] message: text="Rockford showcase: CTR, TWR and GND traffic, departures off 25L, arrivals to 25C and 25R, circuits at Mellor."
 
-# Departures parked at Rockford: GND (push and taxi on request), DEL (tick C, then automatic),
-# TWR (taxi out by themselves, wait at the holding point for takeoff) and fully automatic ones.
+# Departures parked at Rockford, waiting for push and taxi to 25L.
 [00:00] parked: callsign=BAW254 type=A320 stand=1 level=FL240 route=SETHR,GAVIN,VOX to=IPPH climb=3000
 [00:00] parked: callsign=DLH42 type=A321 stand=4 level=FL260 route=GRY,LOGAN,SEEKS to=ISAU climb=3000
 [00:00] parked: callsign=KLM1087 type=B738 stand=7 level=FL300 route=ATPEV,CLR,DEL to=IZOL climb=3000
 [00:00] parked: callsign=UAE15 type=B77W stand=10 level=FL350 route=JAMSI,LAZER to=ILAR climb=3000
-[00:00] autodep: callsign=UAE15 runway=25L when=cleared
 [00:00] parked: callsign=SIA322 type=A359 stand=12 level=FL340 route=HAWFA,INDEX,PROBE to=ITKO climb=3000
-[00:00] autodep: callsign=SIA322 runway=25L when=cleared
 [00:00] parked: callsign=EZY81KP type=A320 stand=13 level=FL200 route=QUEEN,SETHR to=IBTH climb=3000
-[00:00] autodep: callsign=EZY81KP runway=25L when=cleared
 [00:00] parked: callsign=AFR912 type=A20N stand=15 level=FL280 route=JAMSI,LCK to=IPAP climb=3000
-[00:00] autodep: callsign=AFR912 runway=25L when=cleared
 [00:00] parked: callsign=QFA9 type=B789 stand=2 level=FL360 route=LAVNO,CAWZE,CYRIL to=ISCM climb=3000
-[01:00] autodep: callsign=QFA9 runway=25L
 [00:00] parked: callsign=THY77C type=A333 stand=5 level=FL220 route=HAWFA,RES,JOOPY,ONDER to=IBRD climb=3000
-[04:00] autodep: callsign=THY77C runway=25L
 [00:00] parked: callsign=CPA403 type=B744 stand=8 level=FL310 route=HAWFA,INDEX,JOOPY,ONDER to=IDCS climb=3000
-[08:00] autodep: callsign=CPA403 runway=25L
 [00:00] parked: callsign=VIR45 type=B789 stand=11 level=FL330 route=ATPEV,CAWZE,DOGGO to=IJAF climb=3000
-[14:00] autodep: callsign=VIR45 runway=25L
 [00:00] parked: callsign=RYR4471 type=B738 stand=3 level=FL250 route=LAVNO,ANYMS to=ISKP climb=3000
-[00:30] autodep: callsign=RYR4471 runway=25L takeoff=auto
 [00:00] parked: callsign=SWR1880 type=A320 stand=6 level=FL180 route=SETHR,GAVIN,VOX to=ILKL climb=3000
-[06:00] autodep: callsign=SWR1880 runway=25L takeoff=auto
 [00:00] parked: callsign=ANZ8 type=B77W stand=9 level=FL370 route=GODLU,LAZER to=IHEN climb=3000
-[12:00] autodep: callsign=ANZ8 runway=25L takeoff=auto
 [00:00] parked: callsign=JAL61 type=B788 stand=14 level=FL350 route=LAZER,AQWRT to=IIAB climb=3000
-[18:00] autodep: callsign=JAL61 runway=25L takeoff=auto
 
-# Arrivals for Rockford: they fly their route, join a final for 25C / 25R and land by themselves
-# (with TWR open they need a landing clearance), then taxi to a free stand.
+# Arrivals for Rockford: they fly their route toward the airport for an approach clearance to
+# 25C / 25R (without one they are removed close to it); after landing they taxi to a free stand.
 [00:00] airborne: callsign=QTR8 type=A359 position=11.999,-8.238 altitude=6000 speed=250 level=FL060 route=GAVIN,SETHR from=IPPH to=IRFD
-[00:00] autoland: callsign=QTR8
 [00:00] airborne: callsign=ACA88 type=B788 position=-6.368,-19.196 altitude=7000 speed=250 level=FL070 route=PROBE,INDEX from=ITKO to=IRFD
-[00:00] autoland: callsign=ACA88
 [02:30] airborne: callsign=DAL171 type=A332 position=30.476,8.327 altitude=8000 speed=250 level=FL080 route=DEL,ANYMS from=IZOL to=IRFD
-[02:30] autoland: callsign=DAL171
 [05:00] airborne: callsign=SAS937 type=A320 position=-33.129,25.296 altitude=7000 speed=250 level=FL070 route=BEANS,GRY from=ISAU to=IRFD
-[05:00] autoland: callsign=SAS937
 [08:00] airborne: callsign=ETD21 type=B789 position=17.643,30.572 altitude=9000 speed=250 level=FL090 route=JAMSI from=ILAR to=IRFD
-[08:00] autoland: callsign=ETD21
 [11:00] airborne: callsign=IBE6253 type=A321 position=-1.657,-30.059 altitude=8000 speed=250 level=FL080 route=ONDER,JOOPY,RES,INDEX from=IBRD to=IRFD
-[11:00] autoland: callsign=IBE6253
 [15:00] airborne: callsign=UAL900 type=B772 position=26.536,32.181 altitude=9000 speed=250 level=FL090 route=LCK,JAMSI from=IPAP to=IRFD
-[15:00] autoland: callsign=UAL900
 [19:00] airborne: callsign=LOT283 type=E190 position=18.774,-11.022 altitude=5000 speed=230 level=FL050 route=CAMEL,VOX,SETHR from=ILKL to=IRFD
-[19:00] autoland: callsign=LOT283
 [23:00] airborne: callsign=FIN7 type=A321 position=30.239,-1.242 altitude=8000 speed=250 level=FL080 route=CYRIL,CAWZE,SETHR from=ISCM to=IRFD
-[23:00] autoland: callsign=FIN7
 [27:00] airborne: callsign=TAP217 type=A320 position=-4.601,-35.212 altitude=7000 speed=250 level=FL070 route=ONDER,PROBE,INDEX from=IDCS to=IRFD
-[27:00] autoland: callsign=TAP217
 
-# Through traffic for CTR: published routes between other airports, landing at their destination.
+# Through traffic for CTR: published routes between other airports.
 [00:00] airborne: callsign=CES581 type=A333 position=-26.766,13.151 altitude=9000 speed=250 level=FL090 route=BUCFA,INDEX,DINER from=ISAU to=IPPH
-[00:00] autoland: callsign=CES581
 [01:00] airborne: callsign=MAS1 type=A359 position=-1.781,-19.353 altitude=10000 speed=250 level=FL100 route=DINER,GAVIN,ANYMS from=ITKO to=ILAR
-[01:00] autoland: callsign=MAS1
 [07:00] airborne: callsign=GIA88 type=B738 position=31.128,6.916 altitude=8000 speed=250 level=FL080 route=CAWZE,ATPEV,QUEEN,LOGAN from=IZOL to=ISAU
-[07:00] autoland: callsign=GIA88
 [13:00] airborne: callsign=THA650 type=B77W position=3.528,-27.928 altitude=10000 speed=250 level=FL100 route=ALLRY,ROM,SILVA,CAWZE from=IBRD to=IPAP
-[13:00] autoland: callsign=THA650
 [20:00] airborne: callsign=VOZ1544 type=B738 position=1.239,-38.979 altitude=9000 speed=250 level=FL090 route=HONDA,COC,BTM from=IDCS to=ISCM
-[20:00] autoland: callsign=VOZ1544
 [26:00] airborne: callsign=JST701 type=A320 position=16.939,22.712 altitude=6000 speed=250 level=FL060 route=ANYMS,OCEEN,GAVIN,DINER from=ILAR to=ITKO
-[26:00] autoland: callsign=JST701
 
 # Mellor circuit traffic: two light aircraft flying touch-and-go circuits on 25, left hand.
 [00:00] airborne: callsign=GMLRA type=C172 position=-18.105,17.838 altitude=1000 speed=90 level=FL010 route=CCT from=IMLR to=IMLR
